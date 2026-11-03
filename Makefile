@@ -7,8 +7,9 @@ CXXFLAGS := -std=c++17 -O2 -Wall -Wextra -Wpedantic -Isrc
 B := build
 
 .PHONY: test example launcher launcher-shots audit clean
-test: $(B)/menu_test $(B)/c_test $(B)/settings_test $(B)/settings_c_test $(B)/folders_test $(B)/update_test
+test: $(B)/menu_test $(B)/menubar_test $(B)/c_test $(B)/settings_test $(B)/settings_c_test $(B)/folders_test $(B)/update_test
 	@$(B)/menu_test
+	@$(B)/menubar_test
 	@$(B)/c_test
 	@$(B)/settings_test
 	@cd $(B) && ./settings_c_test > /dev/null && echo "settings_c_test: all as it should be"
@@ -18,6 +19,11 @@ test: $(B)/menu_test $(B)/c_test $(B)/settings_test $(B)/settings_c_test $(B)/fo
 $(B)/menu_test: tests/menu_test.cpp src/menu.cpp src/menu.h src/text.h
 	@mkdir -p $(B)
 	$(CXX) $(CXXFLAGS) -fsanitize=address,undefined tests/menu_test.cpp src/menu.cpp -o $@
+
+# The menu bar and the right-click menu (menubar.h)
+$(B)/menubar_test: tests/menubar_test.cpp src/menubar.cpp src/menubar.h src/menu.h src/text.h
+	@mkdir -p $(B)
+	$(CXX) $(CXXFLAGS) -fsanitize=address,undefined tests/menubar_test.cpp src/menubar.cpp -o $@
 
 # (the C interface, from a host compiled as C)
 $(B)/c_test: tests/c_test.c src/menu.cpp src/menu_c.cpp src/menu_c.h src/menu.h src/text.h

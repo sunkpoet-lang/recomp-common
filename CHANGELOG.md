@@ -5,6 +5,14 @@ a minor version. A port's copy only changes when it runs `tools/sync-common.sh`.
 
 ## Unreleased
 
+- **Menu bar** (`menubar.h`): the view for a mouse and a keyboard beside the in-game menu. A bar of menus along
+  the top of the window and the same menus as a popup where the player right-clicks: entries with a label, the key
+  that does the same, a check or a dot, dim when they cannot be used now, lines between groups and submenus. The
+  pointer picks and opens submenus, a click chooses (a dim entry or a line does nothing), and menu.h's buttons work
+  it too (Up and Down past dim entries, Right and Left through submenus and the bar's menus, Confirm, Back). Menus
+  stay inside the canvas (up and to the left of a click near the corner, a submenu at the left where the right has
+  no room); the bar can be hidden (fullscreen) with the popup still there. Drawn with text.h's font at a whole number
+  of pixels to a dot. Nothing in `Menu` changes.
 - **Multi game**: a collection's modes that play several of its games one after another (`Collection::multi`,
   `launcher::MultiMode`), on a page of their own after Controllers. The player chooses the games (those that have
   the mode and a page of their own; kept in `launcher.ini`, `[multi.<key>] off`), their order (the sidebar's, or
