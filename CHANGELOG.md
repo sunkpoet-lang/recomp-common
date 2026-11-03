@@ -5,6 +5,8 @@ a minor version. A port's copy only changes when it runs `tools/sync-common.sh`.
 
 ## Unreleased
 
+- A menu bar entry can show a small picture before its label (`BarEntry::picture`, `pictureWidth`, `pictureHeight`;
+  a save state's, say), fitted to the entry's height; its menu keeps room for the pictures.
 - **Menu bar** (`menubar.h`): the view for a mouse and a keyboard beside the in-game menu. A bar of menus along
   the top of the window and the same menus as a popup where the player right-clicks: entries with a label, the key
   that does the same, a check or a dot, dim when they cannot be used now, lines between groups and submenus. The

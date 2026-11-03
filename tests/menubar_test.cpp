@@ -232,6 +232,34 @@ int main() {
     bar.Close();
     bar.ShowBar(true);
 
+    // A picture before an entry's label: room kept for it, drawn fitted to the entry's height
+    {
+        MenuBar pictured;
+        BarEntry slot = Entry("Slot 1", 1);
+        slot.picture.assign(8 * 4, 0xFF0000FFu); // (red, 8 x 4: twice as wide as tall)
+        slot.pictureWidth = 8;
+        slot.pictureHeight = 4;
+        pictured.Configure({{"Game", {slot, Entry("Slot 2", 2)}}});
+        pictured.SetArea(640, 470, 2);
+        pictured.OpenMenu(0);
+        MenuBar plain;
+        plain.Configure({{"Game", {Entry("Slot 1", 1), Entry("Slot 2", 2)}}});
+        plain.SetArea(640, 470, 2);
+        plain.OpenMenu(0);
+        CHECK(pictured.Boxes()[0].w > plain.Boxes()[0].w);
+        std::vector<uint32_t> pixels(640 * 470, 0xFF000000u);
+        pictured.Draw(pixels.data(), 640, 470);
+        const MenuBar::Box b = pictured.Boxes()[0];
+        // (the picture's middle: 10 dots in, the first entry's middle)
+        const int px = static_cast<int>(b.x) + 10 * 2 + 18 / 2 * 2, py = static_cast<int>(b.y) + 2 * 2 + 11 * 2 / 2;
+        CHECK(pixels[static_cast<size_t>(py) * 640 + px] == 0xFF0000FFu);
+        // (a picture too small for its size is left out, and nothing breaks)
+        slot.picture.resize(3);
+        pictured.Configure({{"Game", {slot}}});
+        pictured.OpenMenu(0);
+        pictured.Draw(pixels.data(), 640, 470);
+    }
+
     // Drawing: inside the picture at any size (the sanitizers catch a pixel outside), the bar drawn over its
     // strip, the picture below untouched with nothing open
     const int sizes[][3] = {{640, 470, 2}, {384, 235, 1}, {1152, 705, 3}, {60, 40, 1}, {1, 1, 1}};

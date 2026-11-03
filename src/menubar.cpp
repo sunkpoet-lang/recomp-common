@@ -4,6 +4,7 @@
 #include "menubar.h"
 
 #include <algorithm>
+#include <cmath>
 
 #include "text.h"
 
@@ -119,8 +120,21 @@ MenuBar::Box MenuBar::ListBox(const std::vector<BarEntry> &entries, float x, flo
         shortcut = std::max(shortcut, TextWidth(entry.shortcut.c_str(), d));
         h += EntryHeight(entry);
     }
-    const float w = kMarkDots * d + label + (shortcut > 0 ? 3 * kCharWidth * d + shortcut : 0) + kArrowDots * d;
+    const float picture = PictureWidth(entries);
+    const float w = kMarkDots * d + (picture > 0 ? picture + 2 * d : 0) + label + (shortcut > 0 ? 3 * kCharWidth * d + shortcut : 0) +
+                    kArrowDots * d;
     return {x, y, std::max(w, kLeastDots * d), h};
+}
+
+float MenuBar::PictureWidth(const std::vector<BarEntry> &entries) const {
+    // (as wide as the first picture's shape makes it at an entry's height, a dot above and below)
+    for (const BarEntry &entry : entries) {
+        if (entry.pictureWidth > 0 && entry.pictureHeight > 0 &&
+            entry.picture.size() >= static_cast<size_t>(entry.pictureWidth) * static_cast<size_t>(entry.pictureHeight)) {
+            return std::round((kEntryDots - 2) * m_dot * entry.pictureWidth / static_cast<float>(entry.pictureHeight));
+        }
+    }
+    return 0;
 }
 
 MenuBar::Box MenuBar::Place(Box box) const {
@@ -399,6 +413,8 @@ void MenuBar::Draw(uint32_t *pixels, int width, int height) const {
         canvas.Fill(b.x, b.y + d, d, b.h - 2 * d, kEdge);
         canvas.Fill(b.x + b.w - d, b.y + d, d, b.h - 2 * d, kEdge);
         float y = b.y + kEdgeDots * d;
+        const float pictures = PictureWidth(*list.entries);
+        const float labelX = b.x + kMarkDots * d + (pictures > 0 ? pictures + 2 * d : 0);
         for (size_t i = 0; i < list.entries->size(); i++) {
             const BarEntry &entry = (*list.entries)[i];
             const float h = EntryHeight(entry);
@@ -420,7 +436,21 @@ void MenuBar::Draw(uint32_t *pixels, int width, int height) const {
             } else if (entry.mark == BarEntry::Dot) {
                 canvas.Fill(mx + 2 * d, ty + 2 * d, 3 * d, 3 * d, color);
             }
-            canvas.Text(b.x + kMarkDots * d, ty, d, 0, color, entry.label.c_str());
+            if (pictures > 0 && entry.pictureWidth > 0 && entry.pictureHeight > 0 &&
+                entry.picture.size() >= static_cast<size_t>(entry.pictureWidth) * static_cast<size_t>(entry.pictureHeight)) {
+                // (each of the room's pixels the picture's nearest; dim with the entry)
+                const int x0 = static_cast<int>(b.x + kMarkDots * d), y0 = static_cast<int>(y + d);
+                const int w = static_cast<int>(pictures), ph = static_cast<int>(h - 2 * d);
+                for (int py = std::max(0, -y0); py < ph && y0 + py < height; py++) {
+                    const uint32_t *from = &entry.picture[static_cast<size_t>(py * entry.pictureHeight / ph) * entry.pictureWidth];
+                    uint32_t *to = pixels + static_cast<size_t>(y0 + py) * width;
+                    for (int px = std::max(0, -x0); px < w && x0 + px < width; px++) {
+                        const uint32_t p = from[px * entry.pictureWidth / w];
+                        to[x0 + px] = entry.enabled ? (p | 0xFF000000u) : (((p >> 1) & 0x7F7F7Fu) | 0xFF000000u);
+                    }
+                }
+            }
+            canvas.Text(labelX, ty, d, 0, color, entry.label.c_str());
             if (!entry.shortcut.empty()) {
                 const float sx = b.x + b.w - kArrowDots * d - TextWidth(entry.shortcut.c_str(), d);
                 canvas.Text(sx, ty, d, 0, entry.enabled ? kDim : kOff, entry.shortcut.c_str());

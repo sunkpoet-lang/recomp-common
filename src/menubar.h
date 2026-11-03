@@ -37,6 +37,10 @@ struct BarEntry {
     bool enabled = true; // (not: shown dim, and clicking it does nothing)
     int id = 0;          // handed back when chosen (an entry with children is never chosen)
     std::vector<BarEntry> children;
+    // A small picture shown before the label (a save state's, say): 32-bit pixels as the canvas's, fitted to
+    // the entry's height. Where any entry of a menu has one, its menu keeps room for them all.
+    std::vector<uint32_t> picture;
+    int pictureWidth = 0, pictureHeight = 0;
 
     static BarEntry Line() {
         return {};
@@ -128,6 +132,7 @@ private:
     Box ListBox(const std::vector<BarEntry> &entries, float x, float y) const;
     Box Place(Box box) const; // moved to be inside the canvas
     float EntryHeight(const BarEntry &entry) const;
+    float PictureWidth(const std::vector<BarEntry> &entries) const; // (the room a menu keeps for pictures: 0, none)
     int EntryAt(const List &list, float y) const;
     int FirstUsable(const std::vector<BarEntry> &entries) const;
     int Step(const std::vector<BarEntry> &entries, int from, int by) const;
