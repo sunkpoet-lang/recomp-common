@@ -5,6 +5,119 @@ a minor version. A port's copy only changes when it runs `tools/sync-common.sh`.
 
 ## Unreleased
 
+- **Paths with accents on Windows** (cps2recomp #223): SDL's paths and the ports' are UTF-8, and a
+  `std::filesystem::path` made from a narrow string reads it in the system's code page there, so a folder named with an
+  é, ã or ç was another folder. `Ini` takes a path given as text (`std::string`, `const char *`) as UTF-8,
+  `LoadBindings` reads settings.ini by its wide name, and the launcher keeps its own folder (`SDL_GetBasePath`), the
+  file dialog's start, the player's folder (`SDL_GetPrefPath`) and the settings path as UTF-8, and gives the updater's
+  programs (curl, tar) their paths as UTF-8.
+- **Updating on Android from the launcher** (cps2recomp #211): the update card's **Update** downloads the release's APK
+  into the app's cache, checks it against the release's `SHA256SUMS.txt` (`Updater::sum_in`), and hands it to the
+  port's activity (`installPackage(String path)`), which opens Android's installer (or first Android's Settings, for
+  the player to allow the app to install apps). Then the card says so (`State::Downloaded`), with **Install** to open
+  the installer again. A release without `SHA256SUMS.txt` still has **Download**, for the browser.
+- **A waiting room for a launcher of one game** (`Online::room`, `room_protocol`): what a collection's Online page has,
+  on the Game page under the Online card: the invitations waiting for this player, and the players in the room to
+  invite to the game. The launcher checks in while the Game page is open. `App::room_url()` and `room_protocol()` are
+  the collection's or the game's; `Online::game`, the id the service knows the game by, is the one game's there (`App::room_game`).
+- The Your files card says "Settings, saves, save states and the logs": "each board's memory" meant nothing to a
+  port of a console game.
+- **A new version on Android** (cps2recomp #209): the updater checks the releases there too. As an app can't replace
+  its own files, it looks for the newest release's APK rather than a manifest, and the update card's **Download**
+  (`Updater::Status::download_url`) opens it for the player to install. `Updater::platform` is `android` there.
+- **What's worth attention stands out on the Online page** (cps2recomp #196): an invitation, open matches that can be
+  joined (their Join the primary button), the waiting room while someone is in it, and a new version are cards tinted and
+  edged with the accent (`Card(width, highlight)`). A new version also puts a dot on the Games row and a card at the top of
+  the Online page, whose **Update…** goes to the Games page's update card. The page's order: open matches (and joining
+  with a code), the waiting room, hosting a match, then the features about a match.
+- **The player's name with Join too** (cps2recomp #196): `App::join_arguments` gives `Online::name_argument NAME` to
+  every Join (an open match, a code, an invitation, an address), and Host gives it whether or not there's a lobby, so
+  that a game can show each player the other's name.
+- **The Online page second**, after Games (cps2recomp #196): the pages played from first, then Features, Controllers
+  and Multi game.
+- **Speed and Mute on a page** (cps2recomp #196): `MenuPage::rows` puts those rows at the top of a page rather than
+  on the first one (a page with only them is there too). The Mute row is "Mute", Off or On, rather than "Sound", On
+  or Muted.
+- **A port's pages as extras** (`Description::open_on_game_page`): the launcher opens on the Game page, not on the
+  first of the port's own pages, and a file dropped on the window goes to a page of the port's own only while that
+  page is shown (else it is the game file). For a port whose own page is an extra (Soulcalibur II's Guest page).
+- **Dark unless the system says light**: where the system says nothing of its theme (Steam's Gaming Mode on the Steam
+  Deck and Steam Machine, a Linux desktop with no preference) the launcher is dark, as Steam is, rather than light.
+- **The sidebar scrolls with a finger** on a touch screen (`App::scroll_sidebar`), as the page beside it does: its list of
+  games was reached only with a mouse wheel. A finger's drag is a scroll before it is a row dragged to another place.
+- **Android** (cps2recomp #104): `launcher.cmake` makes the launcher a library there, and the launcher starts each
+  game's library through the port's activity (`startGame`, `gameResult`), asks a game's library for its features
+  (`RecompListFeatures`), copies the files the player chooses with the system's picker into `roms/` in its folder
+  (`importFiles`, `importResult`; on a collection's first page **Add ROM sets…**), and makes the online requests
+  through the activity (`curl`). The player's folders are in the app's folder on the shared storage. A finger dragged
+  up or down scrolls what is under it (on every system with a touch screen), and a phone's Back is Esc.
+  `LAUNCHER_VERSION` no longer needs `LAUNCHER_UPDATE_REPO`.
+- **Play at the top** of a game's page (a collection's game, and a port's Game page), under its heading: its ROM set,
+  Display and Sound, Online and Steam follow.
+- **The Online page's waiting room** (`Collection::room`, `room_protocol`; online.h `room_check_in`): while the page is
+  open and no game runs, the launcher checks in every five seconds with the player's name, the games they can play and
+  whether others may invite them (`launcher.ini` `[online] invitable`), and lists the other players there, each with
+  **Invite** (Host with `Online::invite_argument` and `invite_name_argument`, in the game chosen in the card) and
+  **Block** (`[online] blocked`, with **Unblock all**). Invitations to this player are a card at the top of the page:
+  **Accept** joins the match's code (**Add…** for a game without its file), **Decline**, **Block**. The player's
+  secret, from which the service makes their id, is `[online] room`.
+
+- **A collection's games in series** (`CollectionGame::series`): two or more games of a series with a page are under
+  one sidebar row, which opens and closes (a chevron; kept in `launcher.ini` `[games] open`) and is a page of the
+  series' games, each with Play and its page. A series moves as one in the player's order (dragged, or Move up/down
+  on its page); a game under it moves among the series' games. The Games page puts the series' name over its games.
+- **Arcade while waiting** on the Online card and the Online page's Host a match (`Online::arcade_argument`, kept in
+  `launcher.ini` `[online] arcade`): a switch that makes Host start the game with that argument too, for a game that
+  lets its host play alone until the other player comes.
+- The launcher's version under its name, at the top of the sidebar. Online play's matches must be on the same version:
+  an open match says its host's version (`OpenMatch::version`), and one on another version is greyed, its Join off;
+  Join with a code says so too (`CodeLookup::version`).
+- The lobby follows the player's name: with **Your name** set, a match hosted from the Online card or the Online page
+  is listed (`Online::list_argument`); without one it's joined only by its code. The card's "List my matches in the
+  lobby" switch is gone, and Your name is on the card always. The Online page's section is **Host a match**. The code
+  field's hint is "The host's code".
+- **Join with a code** on the Online page (`Collection::code_lookup`): the code a host gave, and Join, which asks the
+  service which game the match is for (`lookup_code`) and starts that game with its Online's join argument and the
+  code; a game whose file isn't chosen is said, with Add…; one the collection hasn't, and a code that isn't a match's,
+  are said too.
+- The Online page puts Open matches first, above Host in the lobby and In a match.
+- The Online page shows the features of one category (`Collection::online_features`: what a match shows, the ping
+  and the like) under **In a match**, as the Features page does, set for every game that has them.
+- The Online page's open matches include those of games whose file isn't chosen yet, greyed, with **Add…**, which
+  chooses it as the Games page's Choose… does (`Collection::file_name`: what the file is called there), and those of games the
+  collection hasn't, greyed, by the name the host's game gave (`OpenMatch::title`), with **Update…** to the Games
+  page when the launcher updates itself. A row can be greyed (`layout::row`'s `dim`).
+- A collection's **Online** page (`Collection::lobby`, `online_intro`), after Multi game: **Host in the lobby** (your
+  name, any of the games that can be played, Host: the game started with its Online's host, list and name arguments)
+  and **Open matches**, every game's, with the game's name and Join (a game whose file is not chosen says so). The
+  list comes from `lobby` every five seconds while the page is shown (`OpenMatch::game`).
+- A lobby on the Online card (`launcher::Online::lobby`, `list_argument`, `name_argument`): **List my matches in the
+  lobby** (opt-in, kept in `launcher.ini` `[online] listed`) and **Your name** (`[online] name`) make Host start the
+  game with the list and name arguments; **Open matches** shows the lobby's list (fetched from `lobby` every five
+  seconds while it is shown, on another thread: `fetch_lobby`, `src/online.h`), each with Join. The curl runner moves
+  from `update.cpp` to `run_program.h`/`run_program.cpp`, which every launcher builds.
+- A collection's **Only the games you have**: a switch on the Games page (shown once a game is set up; `launcher.ini`
+  `[games] installed_only`, off unless switched on) that leaves the games whose file has not been chosen out of the
+  Games page, the Features page (a feature none of the player's games has, and their names in its note) and the
+  Controllers page's Layout for list. What is chosen on the Features page is still set for every game that has it.
+- The Online card for a game that gives hosts a code (`launcher::Online::codes`): Host says the game shows a code to
+  hand out, and Join takes the code or an address.
+- Online play: a port that sets `Description::online` (`launcher::Online`: its host and join arguments, the port,
+  a line about it) gets an Online card under Play. **Host** starts the game with the host argument and says this
+  machine's addresses (`local_addresses()`, `src/online.h`: the home network's and Tailscale's, not virtual
+  machines' or containers'); **Join** starts it with the join argument and the address typed (`ui::text_field`),
+  kept in `launcher.ini` under `[online]`. Windows links `iphlpapi` and `ws2_32` for it.
+- A long choice can be made shorter in the game's menu: a feature marked `kFeatureMenuChoices` has, under its row on
+  the launcher's Features page (or a collection game's page), "In the game's menu: N of M" and Choose, which opens a
+  switch for each of its choices. The game's menu (`MenuConfig::offered`) then goes past those switched off with
+  Left, Right and Confirm; off and the one chosen now always stay. Kept in `settings.ini`, `[menu] <name> = 1,3`
+  (`MenuChoices`, `SetMenuChoices`; no value: every choice). A collection sets it for every game that has the feature.
+
+- The Speed row can have speeds faster than full: `MenuConfig::normalSpeed` is full speed's place in `speeds` (slowest
+  first; the slower before it, the faster after) and where the menu starts. Left at 0, the row is as it was.
+- A multi-game mode can list the keys and buttons that work while its games play (`MultiMode::buttons`,
+  `launcher::MultiButton`: a title, what it does, and keycaps for its keys): a While it plays card under the mode's
+  choices, and the same rows in the Now playing card.
 - A menu bar entry can show a small picture before its label (`BarEntry::picture`, `pictureWidth`, `pictureHeight`;
   a save state's, say), fitted to the entry's height; its menu keeps room for the pictures.
 - **Menu bar** (`menubar.h`): the view for a mouse and a keyboard beside the in-game menu. A bar of menus along

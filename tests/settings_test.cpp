@@ -135,6 +135,22 @@ int main() {
         SetFeature(ini, features, 0, 1);
         CHECK(Preset(ini) == "custom" && FeatureValues(ini, features)[0] == 1);
     }
+    // The choices a kFeatureMenuChoices feature's menu offers: all until narrowed, off always, the rest as [menu] says
+    {
+        const FeatureInfo shader = {"shader", "Display", "Shader", "", kFeatureMenuChoices, {"Off", "CRT", "Scanlines", "xBRZ"}};
+        Ini ini = Loaded("[features]\nshader=2\n");
+        CHECK((MenuChoices(ini, shader) == std::vector<bool>{true, true, true, true}));
+        SetMenuChoices(ini, shader, {false, true, false, true});
+        CHECK(ini.get("menu", "shader") == "1,3" && ini.get("features", "shader") == "2");
+        CHECK((MenuChoices(ini, shader) == std::vector<bool>{true, true, false, true}));
+        SetMenuChoices(ini, shader, {true, false, false, false});
+        CHECK(ini.get("menu", "shader") == "0" && (MenuChoices(ini, shader) == std::vector<bool>{true, false, false, false}));
+        SetMenuChoices(ini, shader, {true, true, true, true});
+        CHECK(ini.get("menu", "shader").empty() && (MenuChoices(ini, shader) == std::vector<bool>{true, true, true, true}));
+        // (numbers it has not, and a feature that is not one: every choice)
+        CHECK((MenuChoices(Loaded("[menu]\nshader=9,x,2\n"), shader) == std::vector<bool>{true, false, true, false}));
+        CHECK((MenuChoices(Loaded("[menu]\nhealth=1\n"), features[3]) == std::vector<bool>{true, true, true}));
+    }
     std::error_code error;
     std::filesystem::remove(std::filesystem::temp_directory_path() / "recomp_common_settings_test.ini", error);
     printf("settings: ok\n");

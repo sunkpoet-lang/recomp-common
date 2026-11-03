@@ -7,13 +7,14 @@ CXXFLAGS := -std=c++17 -O2 -Wall -Wextra -Wpedantic -Isrc
 B := build
 
 .PHONY: test example launcher launcher-shots audit clean
-test: $(B)/menu_test $(B)/menubar_test $(B)/c_test $(B)/settings_test $(B)/settings_c_test $(B)/folders_test $(B)/update_test
+test: $(B)/menu_test $(B)/menubar_test $(B)/c_test $(B)/settings_test $(B)/settings_c_test $(B)/folders_test $(B)/proxy_test $(B)/update_test
 	@$(B)/menu_test
 	@$(B)/menubar_test
 	@$(B)/c_test
 	@$(B)/settings_test
 	@cd $(B) && ./settings_c_test > /dev/null && echo "settings_c_test: all as it should be"
 	@$(B)/folders_test
+	@$(B)/proxy_test
 	@$(B)/update_test
 
 $(B)/menu_test: tests/menu_test.cpp src/menu.cpp src/menu.h src/text.h
@@ -41,15 +42,20 @@ $(B)/settings_c_test: tests/settings_c_test.c src/settings.cpp src/settings_c.cp
 	$(CC) -std=c99 -Wall -Wextra -Wpedantic -Isrc -c tests/settings_c_test.c -o $(B)/settings_c_test.o
 	$(CXX) $(CXXFLAGS) $(B)/settings_c_test.o src/settings.cpp src/settings_c.cpp -o $@
 
+# The proxy Windows is set to use, for curl (proxy.h)
+$(B)/proxy_test: tests/proxy_test.cpp src/proxy.h
+	@mkdir -p $(B)
+	$(CXX) $(CXXFLAGS) -fsanitize=address,undefined tests/proxy_test.cpp -o $@
+
 # Where the player's things are, and portable mode (folders.h)
 $(B)/folders_test: tests/folders_test.cpp src/folders.h
 	@mkdir -p $(B)
 	$(CXX) $(CXXFLAGS) -fsanitize=address,undefined tests/folders_test.cpp -o $@
 
 # The launcher's updates (launcher/src/update.h; needs curl and tar, or ditto, to run)
-$(B)/update_test: tests/update_test.cpp launcher/src/update.cpp launcher/src/update.h
+$(B)/update_test: tests/update_test.cpp launcher/src/update.cpp launcher/src/update.h launcher/src/run_program.cpp launcher/src/run_program.h
 	@mkdir -p $(B)
-	$(CXX) $(CXXFLAGS) -Ilauncher/src -fsanitize=address,undefined tests/update_test.cpp launcher/src/update.cpp -o $@
+	$(CXX) $(CXXFLAGS) -Ilauncher/src -fsanitize=address,undefined tests/update_test.cpp launcher/src/update.cpp launcher/src/run_program.cpp -o $@
 
 # A host with no game: build/shot OUT.ppm [KEYS] [WIDTHxHEIGHT] (examples/shot.cpp)
 example: $(B)/shot

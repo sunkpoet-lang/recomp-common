@@ -110,6 +110,15 @@ static void units() {
     CHECK(!Updater::parse_manifest("recomp-update 2\nversion 1.0.0\narchive " + sha + " 9 ../a.zip\ntop T\nfile " + sha + " 10 x a\n", m));
     CHECK(!Updater::parse_manifest("recomp-update 1\nversion 1.0.0\narchive " + sha + " 9 a.zip\nfile " + sha + " 10 5 x a\n", m));
 
+    // SHA256SUMS.txt (Android's APK is checked against it)
+    const std::string other(64, 'b');
+    const std::string sums = sha + "  Game-macOS.zip\n" + other + "  Game-android.apk\r\n" + sha + " *Game windows.zip\n";
+    CHECK(Updater::sum_in(sums, "Game-android.apk") == other);
+    CHECK(Updater::sum_in(sums, "Game windows.zip") == sha);
+    CHECK(Updater::sum_in(sums, "Game-android") == "");  // (the whole name)
+    CHECK(Updater::sum_in(sums, "apk") == "");
+    CHECK(Updater::sum_in("ABC  Game-android.apk\n", "Game-android.apk") == "");
+
     const fs::path abc = fs::temp_directory_path() / "recomp-update-abc";
     write(abc, "abc");
     // (the FIPS 180-2 test vectors, each in pieces: the audit takes 32 hex digits together for a key)

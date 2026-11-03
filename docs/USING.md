@@ -113,8 +113,8 @@ the size the player sees, not at the console's resolution, if you want sharp tex
 - Left and Right go through a row's values and stop at the ends. On a row with no values, Left
   leaves a page for the one it was reached from, and Right on a page's row goes into that page.
 - Back leaves a page for the one it was reached from; on the first page it closes the menu.
-- A `MenuRow::Mute` row ("Sound") switches the game's sound off and on through `MenuConfig::muted` and
-  `setMuted`. Give Space, Enter and a gamepad's A to Confirm, and Backspace and B to Back.
+- A `MenuRow::Mute` row ("Mute", Off or On) switches the game's sound off and on through `MenuConfig::muted` and
+  `setMuted`. The Speed and Mute rows may be on a page rather than the first (`MenuPage::rows`). Give Space, Enter and a gamepad's A to Confirm, and Backspace and B to Back.
 - The menu opens on the page and the row it was closed on.
 
 ## The interface (C)

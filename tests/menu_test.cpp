@@ -86,6 +86,28 @@ int main() {
     CHECK(g_values[1] == 0);
     Press(menu, {kMenuLeft});
     CHECK(g_values[1] == 0);
+    {
+        // Choices the menu does not offer are passed over (MenuConfig::offered): Health's "Player 1"
+        MenuConfig only = Config();
+        only.offered = [](size_t feature, int choice) { return !(feature == 1 && choice == 1); };
+        Menu narrowed;
+        narrowed.Configure(std::move(only));
+        narrowed.Open();
+        g_values[1] = 0;
+        Press(narrowed, {kMenuDown, kMenuDown, kMenuDown, kMenuDown, kMenuConfirm, kMenuDown, kMenuRight});
+        CHECK(g_values[1] == 2);
+        Press(narrowed, {kMenuLeft});
+        CHECK(g_values[1] == 0);
+        Press(narrowed, {kMenuConfirm});
+        CHECK(g_values[1] == 2);
+        Press(narrowed, {kMenuConfirm});
+        CHECK(g_values[1] == 0);
+        // (one chosen elsewhere stays reachable from where it is)
+        g_values[1] = 1;
+        Press(narrowed, {kMenuRight});
+        CHECK(g_values[1] == 2);
+        g_values[1] = 0;
+    }
     // Back (the row after the two features), and the first page is where it was left
     Press(menu, {kMenuDown, kMenuConfirm});
     // ... on the Cheats row: two down is Training, whose page has the command
@@ -101,6 +123,18 @@ int main() {
     CHECK(menu.Speed() == 0);
     Press(menu, {kMenuLeft});
     CHECK(menu.Speed() == 0);
+    {
+        // Full speed in the middle (slower ones before it, faster after): where the menu starts
+        MenuConfig faster = Config();
+        faster.speeds = {"1/2", "Full", "2x"};
+        faster.normalSpeed = 1;
+        Menu both;
+        both.Configure(faster);
+        CHECK(both.Speed() == 1);
+        both.SetSpeed(2);
+        both.Configure(faster);
+        CHECK(both.Speed() == 2); // (chosen, kept)
+    }
 
     // The host's rows hand back their ids
     chosen = Press(menu, {kMenuDown, kMenuConfirm});
@@ -139,6 +173,18 @@ int main() {
         CHECK(!muted);
         std::vector<uint32_t> picture(640 * 480);
         sound.Draw(picture.data(), 640, 480);
+        // (or on a page of its own, with Speed: the page is there for them alone, and they work there)
+        MenuConfig paged = c;
+        paged.groups = {{{MenuRow::Page, 0, "Settings"}, {MenuRow::Resume}}};
+        paged.pages.push_back({"Settings", "", "", false, {MenuRow::Speed, MenuRow::Mute}});
+        Menu inPage;
+        inPage.Configure(paged);
+        inPage.Open();
+        const int speed = inPage.Speed();
+        Press(inPage, {kMenuConfirm, kMenuRight}); // (into the page; its first row, Speed, a step faster)
+        CHECK(inPage.Speed() == speed + 1);
+        Press(inPage, {kMenuDown, kMenuConfirm});   // (Mute: on)
+        CHECK(muted);
     }
 
     // With no speeds there is no Speed row; with nothing at all, nothing happens

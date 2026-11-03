@@ -59,6 +59,14 @@ int main() {
     fs::create_directories(root / "Folder" / "portable.txt");  // (a folder of that name is not the marker)
     CHECK(recomp::PortableFolder(root / "Folder").empty());
 
+    // A folder's name: kept, but for what Windows refuses in one
+    CHECK(recomp::FolderName("X-Men: Children of the Atom", false) == "X-Men: Children of the Atom");
+    CHECK(recomp::FolderName("X-Men: Children of the Atom", true) == "X-Men - Children of the Atom");
+    CHECK(recomp::FolderName("Marvel vs. Capcom", true) == "Marvel vs. Capcom");
+    CHECK(recomp::FolderName("A <b> \"c\" d/e\\f|g?h*", true) == "A b c defgh");
+    CHECK(recomp::FolderName("Trailing. ", true) == "Trailing");
+    CHECK(recomp::FolderName("??", true) == "_");
+
     fs::remove_all(root);
     if (failures == 0) {
         std::printf("folders_test: all as it should be\n");
