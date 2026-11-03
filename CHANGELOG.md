@@ -13,6 +13,14 @@ a minor version. A port's copy only changes when it runs `tools/sync-common.sh`.
   stay inside the canvas (up and to the left of a click near the corner, a submenu at the left where the right has
   no room); the bar can be hidden (fullscreen) with the popup still there. Drawn with text.h's font at a whole number
   of pixels to a dot. Nothing in `Menu` changes.
+- The in-game menu's rows in the menu bar (`AddMenuEntries`, `ChooseMenuEntry`, `BarOptions`), so that the two
+  offer the same: each row in the bar's menu its new `MenuRow::bar` names (C: `RMenuRow::bar`), or by its kind (Save,
+  Load, Slot, actions and Quit in Game; Speed and the pages in Features; Mute in Audio). Save state, Load state, Slot
+  and Speed are submenus of their values; a page is a submenu of its commands, the pages under it and its features
+  (a check, or a submenu of choices); a line between groups; Resume left out. Choosing one changes the slot, the
+  speed, a feature or the sound, or hands back what `Menu::Buttons` would. Load state's empty slots can be dim and a
+  slot can say when it was kept. C hosts that fill `RMenuRow` in order add a `NULL` for `bar` (else
+  `-Wmissing-field-initializers` says so; the menu is the same).
 - **Multi game**: a collection's modes that play several of its games one after another (`Collection::multi`,
   `launcher::MultiMode`), on a page of their own after Controllers. The player chooses the games (those that have
   the mode and a page of their own; kept in `launcher.ini`, `[multi.<key>] off`), their order (the sidebar's, or

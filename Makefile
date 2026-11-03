@@ -21,9 +21,9 @@ $(B)/menu_test: tests/menu_test.cpp src/menu.cpp src/menu.h src/text.h
 	$(CXX) $(CXXFLAGS) -fsanitize=address,undefined tests/menu_test.cpp src/menu.cpp -o $@
 
 # The menu bar and the right-click menu (menubar.h)
-$(B)/menubar_test: tests/menubar_test.cpp src/menubar.cpp src/menubar.h src/menu.h src/text.h
+$(B)/menubar_test: tests/menubar_test.cpp src/menubar.cpp src/menubar.h src/menu.cpp src/menu.h src/text.h
 	@mkdir -p $(B)
-	$(CXX) $(CXXFLAGS) -fsanitize=address,undefined tests/menubar_test.cpp src/menubar.cpp -o $@
+	$(CXX) $(CXXFLAGS) -fsanitize=address,undefined tests/menubar_test.cpp src/menubar.cpp src/menu.cpp -o $@
 
 # (the C interface, from a host compiled as C)
 $(B)/c_test: tests/c_test.c src/menu.cpp src/menu_c.cpp src/menu_c.h src/menu.h src/text.h

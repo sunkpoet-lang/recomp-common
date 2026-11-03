@@ -27,13 +27,13 @@ static void setValue(void* user, int feature, int v) {
 int main(void) {
   static const char* const kinds[] = {"Off", "Some", "All", NULL};
   static const RMenuRow rows[] = {
-    {RMENU_ROW_SAVE, 0, 0, NULL, NULL},
-    {RMENU_ROW_LOAD, 0, 0, NULL, NULL},
-    {RMENU_ROW_SLOT, 0, 0, NULL, NULL},
-    {RMENU_ROW_PAGES, 1, 0, NULL, NULL},
-    {RMENU_ROW_ACTION, 1, 5, "Reset", "Starts the game again."},
-    {RMENU_ROW_QUIT, 2, 0, NULL, NULL},
-    {RMENU_ROW_RESUME, 2, 0, NULL, NULL},
+    {RMENU_ROW_SAVE, 0, 0, NULL, NULL, NULL},
+    {RMENU_ROW_LOAD, 0, 0, NULL, NULL, NULL},
+    {RMENU_ROW_SLOT, 0, 0, NULL, NULL, NULL},
+    {RMENU_ROW_PAGES, 1, 0, NULL, NULL, NULL},
+    {RMENU_ROW_ACTION, 1, 5, "Reset", "Starts the game again.", NULL},
+    {RMENU_ROW_QUIT, 2, 0, NULL, NULL, NULL},
+    {RMENU_ROW_RESUME, 2, 0, NULL, NULL, NULL},
   };
   static const RMenuFeature features[] = {
     {"Cheats", "Endless lives", "Lives are not lost.", NULL},

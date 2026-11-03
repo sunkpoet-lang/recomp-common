@@ -3,7 +3,8 @@
 // The menu bar of a port's window, and the same menus as a popup where the player right-clicks: the view
 // for a mouse and a keyboard, beside the in-game menu (menu.h) for a gamepad.
 //
-// It knows nothing of any game, of the in-game menu or of SDL. The host says what the menus hold (entries
+// The bar itself knows nothing of any game, of the in-game menu or of SDL; AddMenuEntries (at the end) puts the
+// in-game menu's rows in its menus, so that both show the same. The host says what the menus hold (entries
 // with a label, the key that does the same, a mark, whether they can be used now, and submenus), tells it
 // where the pointer is, what was clicked and which of menu.h's buttons were pressed, and carries out the id
 // of what was chosen. It draws itself, the bar along the top of the canvas and the menus that are open
@@ -14,9 +15,12 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <string>
 #include <utility>
 #include <vector>
+
+#include "menu.h"
 
 namespace recomp {
 
@@ -143,5 +147,22 @@ private:
     int m_levels = 0;
     std::vector<int> m_picked;
 };
+
+// The in-game menu's rows as the bar's entries, so that the two offer the same. Each row goes in the menu its
+// `bar` names, or by its kind: Save, Load, Slot, Action and Quit in "Game", Speed and the pages in "Features",
+// Mute in "Audio"; a menu not in `menus` is added at the end. Resume is left out (the bar closes by itself).
+// Save state, Load state, Slot and Speed are submenus of their values (the slot and the speed are the menu's);
+// a page is a submenu of its commands, the pages under it and its features (one that is on or off a check, one
+// of several choices a submenu of them); rows of different groups have a line between them.
+struct BarOptions {
+    std::function<bool(int slot)> slotUsed;          // Load state's slots: dim where none is kept (none: all usable)
+    std::function<std::string(int slot)> slotDetail; // said after a slot's number ("21:40")
+};
+void AddMenuEntries(std::vector<BarMenu> &menus, const MenuConfig &config, const Menu &menu, const BarOptions &options = {});
+// Whether an id is one AddMenuEntries gave (they are 0x40000000 and above: the host's own are below)
+bool IsMenuEntry(int id);
+// An entry AddMenuEntries made, chosen: the slot, the speed, a feature and the sound are changed here, and what
+// the host is to do is returned as Menu::Buttons would (Save and Load with the menu's slot set to the one chosen)
+Menu::Chosen ChooseMenuEntry(int id, const MenuConfig &config, Menu &menu);
 
 } // namespace recomp

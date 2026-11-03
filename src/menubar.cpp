@@ -5,7 +5,6 @@
 
 #include <algorithm>
 
-#include "menu.h"
 #include "text.h"
 
 namespace recomp {
@@ -432,6 +431,255 @@ void MenuBar::Draw(uint32_t *pixels, int width, int height) const {
             y += h;
         }
     }
+}
+
+// The in-game menu's rows as the bar's entries (AddMenuEntries)
+
+namespace {
+    // An entry's id: 0x40000000, what it is (4 bits), then two numbers of 12 bits (a slot, a feature and its
+    // choice, a row's place...)
+    enum : int { kSave = 1, kLoad, kSlot, kSpeed, kCommand, kToggle, kChoice, kAction, kQuit, kMute };
+    constexpr int kEntryBase = 0x40000000;
+
+    int EntryId(int what, int a, int b = 0) {
+        return kEntryBase | (what << 24) | ((a & 0xFFF) << 12) | (b & 0xFFF);
+    }
+
+    BarEntry Item(std::string label, int id, BarEntry::Mark mark = BarEntry::NoMark) {
+        BarEntry e;
+        e.label = std::move(label);
+        e.id = id;
+        e.mark = mark;
+        return e;
+    }
+
+    BarEntry Submenu(std::string label, std::vector<BarEntry> children) {
+        BarEntry e;
+        e.label = std::move(label);
+        e.children = std::move(children);
+        return e;
+    }
+
+    struct Pages {
+        const MenuConfig &config;
+
+        std::string Parent(const std::string &page) const {
+            for (const MenuPage &p : config.pages) {
+                if (p.name == page) {
+                    return p.parent;
+                }
+            }
+            return {};
+        }
+        bool Holds(const std::string &page) const {
+            return std::any_of(config.features.begin(), config.features.end(), [&](const MenuFeature &f) { return f.category == page; }) ||
+                   std::any_of(config.commands.begin(), config.commands.end(), [&](const MenuCommand &c) { return c.category == page; });
+        }
+        // (as Menu has it: something on it, or on a page under it)
+        bool Exists(const std::string &page) const {
+            if (page.empty()) {
+                return false;
+            }
+            if (Holds(page)) {
+                return true;
+            }
+            return std::any_of(config.pages.begin(), config.pages.end(), [&](const MenuPage &under) {
+                return under.parent == page && under.name != page && Holds(under.name);
+            });
+        }
+        // A page: its commands, the pages under it, its features
+        BarEntry Page(const std::string &page, int depth = 0) const {
+            std::vector<BarEntry> entries;
+            for (size_t i = 0; i < config.commands.size(); i++) {
+                if (config.commands[i].category == page) {
+                    entries.push_back(Item(config.commands[i].title, EntryId(kCommand, static_cast<int>(i))));
+                }
+            }
+            for (const MenuPage &under : config.pages) {
+                if (depth < 8 && under.parent == page && under.name != page && Exists(under.name)) {
+                    entries.push_back(Page(under.name, depth + 1));
+                }
+            }
+            for (size_t i = 0; i < config.features.size(); i++) {
+                const MenuFeature &feature = config.features[i];
+                if (feature.category != page) {
+                    continue;
+                }
+                const int value = config.value ? config.value(i) : 0;
+                if (feature.choices.empty()) {
+                    entries.push_back(Item(feature.title, EntryId(kToggle, static_cast<int>(i)), value ? BarEntry::Check : BarEntry::NoMark));
+                } else {
+                    std::vector<BarEntry> choices;
+                    for (size_t c = 0; c < feature.choices.size(); c++) {
+                        choices.push_back(Item(feature.choices[c], EntryId(kChoice, static_cast<int>(i), static_cast<int>(c)),
+                                               static_cast<int>(c) == value ? BarEntry::Dot : BarEntry::NoMark));
+                    }
+                    entries.push_back(Submenu(feature.title, std::move(choices)));
+                }
+                entries.back().enabled = static_cast<bool>(config.setValue);
+            }
+            return Submenu(page, std::move(entries));
+        }
+    };
+} // namespace
+
+bool IsMenuEntry(int id) {
+    return id > 0 && (id & kEntryBase) != 0;
+}
+
+void AddMenuEntries(std::vector<BarMenu> &menus, const MenuConfig &config, const Menu &menu, const BarOptions &options) {
+    const Pages pages{config};
+    std::vector<int> lastGroup(menus.size(), -1);
+    const auto into = [&](const MenuRow &row, const char *byKind, int group) -> std::vector<BarEntry> & {
+        const std::string name = row.bar.empty() ? byKind : row.bar;
+        size_t m = 0;
+        while (m < menus.size() && menus[m].title != name) {
+            m++;
+        }
+        if (m == menus.size()) {
+            menus.push_back({name, {}});
+            lastGroup.push_back(-1);
+        }
+        std::vector<BarEntry> &entries = menus[m].entries;
+        if (!entries.empty() && lastGroup[m] != group) {
+            entries.push_back(BarEntry::Line());
+        }
+        lastGroup[m] = group;
+        return entries;
+    };
+    const auto slots = [&](int what) {
+        std::vector<BarEntry> entries;
+        for (int slot = 1; slot <= 9; slot++) {
+            std::string label = "Slot " + std::to_string(slot);
+            if (options.slotDetail) {
+                const std::string detail = options.slotDetail(slot);
+                if (!detail.empty()) {
+                    label += "  " + detail;
+                }
+            }
+            entries.push_back(Item(label, EntryId(what, slot), slot == menu.Slot() ? BarEntry::Dot : BarEntry::NoMark));
+            if (what == kLoad && options.slotUsed && !options.slotUsed(slot)) {
+                entries.back().enabled = false;
+            }
+        }
+        return entries;
+    };
+    // (the pages that have a row of their own are not also among the Pages row's)
+    std::vector<std::string> ownRows;
+    for (const std::vector<MenuRow> &group : config.groups) {
+        for (const MenuRow &row : group) {
+            if (row.kind == MenuRow::Page) {
+                ownRows.push_back(row.title);
+            }
+        }
+    }
+    int place = 0; // (a row's place among all the first page's rows, for an Action's id)
+    for (size_t g = 0; g < config.groups.size(); g++) {
+        const int group = static_cast<int>(g);
+        for (const MenuRow &row : config.groups[g]) {
+            const int index = place++;
+            switch (row.kind) {
+            case MenuRow::Save: into(row, "Game", group).push_back(Submenu("Save state", slots(kSave))); break;
+            case MenuRow::Load: into(row, "Game", group).push_back(Submenu("Load state", slots(kLoad))); break;
+            case MenuRow::Slot: into(row, "Game", group).push_back(Submenu("Slot", slots(kSlot))); break;
+            case MenuRow::Speed:
+                if (!config.speeds.empty()) {
+                    std::vector<BarEntry> speeds;
+                    for (size_t i = 0; i < config.speeds.size(); i++) {
+                        speeds.push_back(Item(config.speeds[i], EntryId(kSpeed, static_cast<int>(i)),
+                                              static_cast<int>(i) == menu.Speed() ? BarEntry::Dot : BarEntry::NoMark));
+                    }
+                    into(row, "Features", group).push_back(Submenu("Speed", std::move(speeds)));
+                }
+                break;
+            case MenuRow::Action: into(row, "Game", group).push_back(Item(row.title, EntryId(kAction, index))); break;
+            case MenuRow::Quit: into(row, "Game", group).push_back(Item("Quit game", EntryId(kQuit, 0))); break;
+            case MenuRow::Resume: break;
+            case MenuRow::Mute:
+                if (config.muted && config.setMuted) {
+                    into(row, "Audio", group).push_back(Item("Mute", EntryId(kMute, 0), config.muted() ? BarEntry::Check : BarEntry::NoMark));
+                }
+                break;
+            case MenuRow::Page:
+                if (pages.Exists(row.title)) {
+                    into(row, "Features", group).push_back(pages.Page(row.title));
+                }
+                break;
+            case MenuRow::Pages: {
+                std::vector<BarEntry> found;
+                for (size_t i = 0; i < config.commands.size(); i++) {
+                    if (config.commands[i].category.empty()) {
+                        found.push_back(Item(config.commands[i].title, EntryId(kCommand, static_cast<int>(i))));
+                    }
+                }
+                std::vector<std::string> seen = ownRows;
+                const auto addPage = [&](const std::string &category) {
+                    if (!category.empty() && std::find(seen.begin(), seen.end(), category) == seen.end()) {
+                        seen.push_back(category);
+                        if (pages.Parent(category).empty()) {
+                            found.push_back(pages.Page(category));
+                        }
+                    }
+                };
+                for (const MenuFeature &feature : config.features) {
+                    addPage(feature.category);
+                }
+                for (const MenuCommand &command : config.commands) {
+                    addPage(command.category);
+                }
+                if (!found.empty()) {
+                    std::vector<BarEntry> &entries = into(row, "Features", group);
+                    entries.insert(entries.end(), found.begin(), found.end());
+                }
+                break;
+            }
+            }
+        }
+    }
+}
+
+Menu::Chosen ChooseMenuEntry(int id, const MenuConfig &config, Menu &menu) {
+    if (!IsMenuEntry(id)) {
+        return {};
+    }
+    const int what = (id >> 24) & 0xF, a = (id >> 12) & 0xFFF, b = id & 0xFFF;
+    switch (what) {
+    case kSave: menu.SetSlot(a); return {Menu::Chosen::Save, 0};
+    case kLoad: menu.SetSlot(a); return {Menu::Chosen::Load, 0};
+    case kSlot: menu.SetSlot(a); break;
+    case kSpeed: menu.SetSpeed(a); break;
+    case kCommand:
+        if (a < static_cast<int>(config.commands.size())) {
+            return {Menu::Chosen::Command, a};
+        }
+        break;
+    case kToggle:
+    case kChoice:
+        if (a < static_cast<int>(config.features.size()) && config.setValue) {
+            const int value = config.value ? config.value(static_cast<size_t>(a)) : 0;
+            config.setValue(static_cast<size_t>(a), what == kToggle ? (value ? 0 : 1) : b);
+        }
+        break;
+    case kAction: {
+        int place = 0;
+        for (const std::vector<MenuRow> &group : config.groups) {
+            for (const MenuRow &row : group) {
+                if (place++ == a && row.kind == MenuRow::Action) {
+                    return {Menu::Chosen::Action, row.id};
+                }
+            }
+        }
+        break;
+    }
+    case kQuit: return {Menu::Chosen::Quit, 0};
+    case kMute:
+        if (config.muted && config.setMuted) {
+            config.setMuted(!config.muted());
+        }
+        break;
+    default: break;
+    }
+    return {};
 }
 
 } // namespace recomp

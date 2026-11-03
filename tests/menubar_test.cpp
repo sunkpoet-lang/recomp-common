@@ -1,11 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2026 Tommy McLeroy. Part of recomp-common: https://github.com/tmcleroy/recomp-common
 // The menu bar's rules (menubar.h): where its names and menus are, what the pointer, clicks and buttons do,
-// that menus stay inside the canvas, and that drawing stays inside the picture at any size.
+// that menus stay inside the canvas, that drawing stays inside the picture at any size, and that the in-game
+// menu's rows become the bar's entries and do the same.
 #include "menubar.h"
 
 #include <cstdio>
 #include <cstdlib>
+#include <map>
+#include <string>
 #include <vector>
 
 #include "menu.h"
@@ -248,6 +251,134 @@ int main() {
         bar.Buttons(kMenuDown);
         bar.Buttons(kMenuRight);
         bar.Draw(pixels.data(), s[0], s[1]);
+    }
+
+    // The in-game menu's rows as the bar's entries (AddMenuEntries, ChooseMenuEntry)
+    {
+        static std::map<size_t, int> values;
+        static bool muted = false;
+        MenuConfig config;
+        MenuRow coin{MenuRow::Action, 7, "Insert coin", "Puts a coin in."};
+        coin.bar = "Input";
+        config.groups = {
+            {{MenuRow::Save}, {MenuRow::Load}, {MenuRow::Slot}},
+            {{MenuRow::Pages}, {MenuRow::Speed}, coin, {MenuRow::Mute}},
+            {{MenuRow::Action, 9, "Reset", "Starts again."}, {MenuRow::Quit}, {MenuRow::Resume}},
+        };
+        config.features = {
+            {"Cheats", "Endless time", "The clock stands still."},
+            {"Cheats", "Health", "Whose health is kept full.", {"Off", "Player 1", "Both"}},
+            {"Picture", "Wide", "A wider picture."},
+            {"Hidden", "Secret", "Under Cheats."},
+        };
+        config.commands = {
+            {"", "Start over", "Back to where the round began."},
+            {"Training", "Begin", "Starts a session."},
+        };
+        config.pages = {{"Hidden", "Cheats", ""}};
+        config.value = [](size_t feature) { return values[feature]; };
+        config.setValue = [](size_t feature, int value) { values[feature] = value; };
+        config.speeds = {"Full", "Half"};
+        config.muted = [] { return muted; };
+        config.setMuted = [](bool m) { muted = m; };
+        Menu menu;
+        menu.Configure(config);
+
+        const auto build = [&](const BarOptions &options = {}) {
+            std::vector<BarMenu> menus = {{"Game", {}}, {"Video", {Entry("Fullscreen", kFull)}}, {"Audio", {}}, {"Input", {}}, {"Features", {}}, {"Help", {}}};
+            AddMenuEntries(menus, config, menu, options);
+            return menus;
+        };
+        const auto labels = [](const std::vector<BarEntry> &entries) {
+            std::string s;
+            for (const BarEntry &e : entries) {
+                s += (e.IsLine() ? std::string("-") : e.label) + "|";
+            }
+            return s;
+        };
+        const auto find = [](const std::vector<BarEntry> &entries, const std::string &label) -> const BarEntry * {
+            for (const BarEntry &e : entries) {
+                if (e.label == label) {
+                    return &e;
+                }
+            }
+            return nullptr;
+        };
+
+        std::vector<BarMenu> menus = build();
+        CHECK(menus.size() == 6); // (no menu added: every row's is there)
+        // Each row in its menu, by its kind or its `bar`, with a line between groups; Resume left out
+        CHECK(labels(menus[0].entries) == "Save state|Load state|Slot|-|Reset|Quit game|");
+        CHECK(labels(menus[1].entries) == "Fullscreen|"); // (the host's own, untouched)
+        CHECK(labels(menus[2].entries) == "Mute|");
+        CHECK(labels(menus[3].entries) == "Insert coin|");
+        CHECK(labels(menus[4].entries) == "Start over|Cheats|Picture|Training|Speed|");
+        // Save state's slots, the menu's slot marked; a page holds its commands, the pages under it, its features
+        CHECK(menus[0].entries[0].children.size() == 9);
+        CHECK(menus[0].entries[0].children[0].mark == BarEntry::Dot && menus[0].entries[0].children[1].mark == BarEntry::NoMark);
+        const BarEntry *cheats = find(menus[4].entries, "Cheats");
+        CHECK(labels(cheats->children) == "Hidden|Endless time|Health|");
+        CHECK(find(cheats->children, "Health")->children.size() == 3);
+        CHECK(labels(find(menus[4].entries, "Training")->children) == "Begin|");
+        CHECK(find(menus[4].entries, "Speed")->children[0].mark == BarEntry::Dot);
+
+        // A feature's mark follows its value, and choosing changes it
+        CHECK(find(cheats->children, "Endless time")->mark == BarEntry::NoMark);
+        Menu::Chosen did = ChooseMenuEntry(find(cheats->children, "Endless time")->id, config, menu);
+        CHECK(did.kind == Menu::Chosen::None && values[0] == 1);
+        menus = build();
+        cheats = find(menus[4].entries, "Cheats");
+        CHECK(find(cheats->children, "Endless time")->mark == BarEntry::Check);
+        ChooseMenuEntry(find(cheats->children, "Health")->children[2].id, config, menu);
+        CHECK(values[1] == 2);
+        menus = build();
+        cheats = find(menus[4].entries, "Cheats");
+        CHECK(find(cheats->children, "Health")->children[2].mark == BarEntry::Dot);
+
+        // Save and Load hand back what Menu would, with the slot chosen; Slot and Speed change the menu's
+        did = ChooseMenuEntry(menus[0].entries[0].children[2].id, config, menu);
+        CHECK(did.kind == Menu::Chosen::Save && menu.Slot() == 3);
+        did = ChooseMenuEntry(menus[0].entries[1].children[4].id, config, menu);
+        CHECK(did.kind == Menu::Chosen::Load && menu.Slot() == 5);
+        ChooseMenuEntry(menus[0].entries[2].children[8].id, config, menu);
+        CHECK(menu.Slot() == 9);
+        ChooseMenuEntry(find(menus[4].entries, "Speed")->children[1].id, config, menu);
+        CHECK(menu.Speed() == 1);
+        // Actions with their ids, Quit, a command by its place, and the sound
+        CHECK(ChooseMenuEntry(menus[3].entries[0].id, config, menu).id == 7);
+        did = ChooseMenuEntry(find(menus[0].entries, "Reset")->id, config, menu);
+        CHECK(did.kind == Menu::Chosen::Action && did.id == 9);
+        CHECK(ChooseMenuEntry(find(menus[0].entries, "Quit game")->id, config, menu).kind == Menu::Chosen::Quit);
+        did = ChooseMenuEntry(find(find(menus[4].entries, "Training")->children, "Begin")->id, config, menu);
+        CHECK(did.kind == Menu::Chosen::Command && did.id == 1);
+        ChooseMenuEntry(menus[2].entries[0].id, config, menu);
+        CHECK(muted);
+        menus = build();
+        CHECK(menus[2].entries[0].mark == BarEntry::Check);
+        // The host's own ids are not the menu's
+        CHECK(!IsMenuEntry(kFull) && IsMenuEntry(menus[2].entries[0].id));
+        CHECK(ChooseMenuEntry(kFull, config, menu).kind == Menu::Chosen::None);
+
+        // Load state's empty slots are dim, and a slot's detail follows its number
+        BarOptions options;
+        options.slotUsed = [](int slot) { return slot == 2; };
+        options.slotDetail = [](int slot) { return slot == 2 ? std::string("21:40") : std::string(); };
+        menus = build(options);
+        CHECK(!menus[0].entries[1].children[0].enabled && menus[0].entries[1].children[1].enabled);
+        CHECK(menus[0].entries[1].children[1].label == "Slot 2  21:40");
+        CHECK(menus[0].entries[0].children[0].enabled); // (saving is to any slot)
+        // A row whose menu is not there adds it at the end; without muted and setMuted there is no Mute
+        config.groups[2][0].bar = "Debug";
+        config.muted = nullptr;
+        menus = build();
+        CHECK(menus.size() == 7 && menus[6].title == "Debug" && labels(menus[6].entries) == "Reset|");
+        CHECK(menus[2].entries.empty());
+        // and what it makes works in the bar
+        MenuBar fromMenu;
+        fromMenu.Configure(menus);
+        fromMenu.SetArea(640, 470, 2);
+        fromMenu.OpenMenu(4);
+        CHECK(fromMenu.IsOpen());
     }
 
     printf("menubar_test: all as it should be\n");
