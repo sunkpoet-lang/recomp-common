@@ -1,0 +1,2 @@
+tests/chat-text.golden -text
+tests/chat-vectors.txt -text

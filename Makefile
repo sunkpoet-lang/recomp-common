@@ -7,7 +7,7 @@ CXXFLAGS := -std=c++17 -O2 -Wall -Wextra -Wpedantic -Isrc
 B := build
 
 .PHONY: test example launcher launcher-shots audit clean
-test: $(B)/menu_test $(B)/menubar_test $(B)/c_test $(B)/settings_test $(B)/settings_c_test $(B)/folders_test $(B)/proxy_test $(B)/update_test
+test: $(B)/menu_test $(B)/menubar_test $(B)/c_test $(B)/settings_test $(B)/settings_c_test $(B)/folders_test $(B)/proxy_test $(B)/update_test $(B)/chat_test
 	@$(B)/menu_test
 	@$(B)/menubar_test
 	@$(B)/c_test
@@ -16,6 +16,7 @@ test: $(B)/menu_test $(B)/menubar_test $(B)/c_test $(B)/settings_test $(B)/setti
 	@$(B)/folders_test
 	@$(B)/proxy_test
 	@$(B)/update_test
+	@$(B)/chat_test
 
 $(B)/menu_test: tests/menu_test.cpp src/menu.cpp src/menu.h src/text.h
 	@mkdir -p $(B)
@@ -41,6 +42,11 @@ $(B)/settings_c_test: tests/settings_c_test.c src/settings.cpp src/settings_c.cp
 	@mkdir -p $(B)
 	$(CC) -std=c99 -Wall -Wextra -Wpedantic -Isrc -c tests/settings_c_test.c -o $(B)/settings_c_test.o
 	$(CXX) $(CXXFLAGS) $(B)/settings_c_test.o src/settings.cpp src/settings_c.cpp -o $@
+
+# (ForkAde's fork) The in-game chat (chat.h) against ForkAde's test vectors, and the font's Spanish letters
+$(B)/chat_test: tests/chat_test.cpp src/chat.cpp src/chat.h src/text.h
+	@mkdir -p $(B)
+	$(CXX) $(CXXFLAGS) -std=c++20 -fsanitize=address,undefined tests/chat_test.cpp src/chat.cpp -o $@
 
 # The proxy Windows is set to use, for curl (proxy.h)
 $(B)/proxy_test: tests/proxy_test.cpp src/proxy.h
