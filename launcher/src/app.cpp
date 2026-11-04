@@ -1923,6 +1923,9 @@ void App::play_cards(size_t which, float width, bool ready) {
     Slot& one = *slots_[which];
     online_card(which, width, ready);
     tunnel_card(which, width); // (this fork: a game played through the tunnel)
+    if (one.about->tunnel.port != 0) {
+        chat_card(width); // (this fork: ForkAde's in-game chat, for a game played through the tunnel)
+    }
     // Linux and Steam Deck: shortcuts for Steam's Game Mode.
     static const bool steam = can_add_to_steam();
     if (steam) {
@@ -2025,7 +2028,11 @@ void App::open_room(size_t which, bool host) {
     tunnel_room_.game = which;
     if (host) {
         // (the game waits for a player by itself; the code shows when the tunnel has it)
-        play(which, one.about->tunnel.arguments(""));
+        std::vector<std::string> arguments = one.about->tunnel.arguments("");
+        for (const std::string& more : chat_arguments()) {
+            arguments.push_back(more); // (this fork: the in-game chat's name and log)
+        }
+        play(which, arguments);
         tunnel_room_.started = true;
         if (!one.play_error.empty()) {
             close_room(one.play_error);
@@ -2073,7 +2080,11 @@ void App::room_line(const std::string& line) {
         tunnel_room_.code = rest;
     } else if (word == "LISTEN" && !tunnel_room_.host && !tunnel_room_.started) {
         // the tunnel listens: the game joins it
-        play(tunnel_room_.game, slots_[tunnel_room_.game]->about->tunnel.arguments("127.0.0.1:" + rest));
+        std::vector<std::string> arguments = slots_[tunnel_room_.game]->about->tunnel.arguments("127.0.0.1:" + rest);
+        for (const std::string& more : chat_arguments()) {
+            arguments.push_back(more); // (this fork: the in-game chat's name and log)
+        }
+        play(tunnel_room_.game, arguments);
         tunnel_room_.started = true;
         if (!slots_[tunnel_room_.game]->play_error.empty()) {
             close_room(slots_[tunnel_room_.game]->play_error);
@@ -2229,6 +2240,79 @@ void App::tunnel_card(size_t which, float width) {
         ImGui::SetCursorScreenPos(ImVec2(at.x, bottom + px(14)));
         ImGui::Dummy(ImVec2(width, 0));
     }
+    card.end();
+}
+
+// (this fork) ForkAde's in-game chat: the name the other player sees (1 to 16 characters, [online] name, which
+// Tommy's netplay also says), whether each match's chat is kept on this computer ([chat] keep), and its folder
+namespace {
+    // (the name as the games clean it, recomp-common's chat.h: no controls, no spaces at its ends, 16 characters)
+    std::string ChatName(const char* typed) {
+        std::string out;
+        size_t characters = 0;
+        for (const unsigned char* c = reinterpret_cast<const unsigned char*>(typed); *c; c++) {
+            if (*c < 0x20 || *c == 0x7F) {
+                continue;
+            }
+            if ((*c & 0xC0) != 0x80 && ++characters > 16) {
+                break;
+            }
+            out += static_cast<char>(*c);
+        }
+        const size_t first = out.find_first_not_of(' ');
+        return first == std::string::npos ? std::string() : out.substr(first, out.find_last_not_of(' ') - first + 1);
+    }
+} // namespace
+
+std::filesystem::path App::chat_folder() const {
+    return folder_ / "chat";
+}
+
+std::vector<std::string> App::chat_arguments() const {
+    std::vector<std::string> arguments;
+    const std::string name = ChatName(online_name_);
+    if (!name.empty()) {
+        arguments.insert(arguments.end(), {"--nick", name});
+    }
+    if (prefs_.get("chat", "keep") != "off") {
+        const auto folder = chat_folder().u8string();
+        arguments.insert(arguments.end(), {"--chat-log", std::string(folder.begin(), folder.end())});
+    }
+    return arguments;
+}
+
+void App::chat_card(float width) {
+    static const bool tunnel = std::filesystem::exists(tunnel_path());
+    if (!tunnel) {
+        return;
+    }
+    const ui::Palette& p = ui::palette();
+    ui::gap(28);
+    ui::text("CHAT", Font::Semibold, ui::size::kDetail, p.secondary);
+    ui::gap(10);
+    Card card(width);
+    row(width, "Your name", "What the other player sees beside your messages (T opens the chat during a match).", 190.0f, 36.0f, [&] {
+        if (ui::text_field("##chat_name", online_name_, sizeof(online_name_), "Player 1 or 2", 190.0f)) {
+            prefs_.set("online", "name", ChatName(online_name_));
+            prefs_.save();
+        }
+    });
+    inset_separator(width);
+    const bool keep = prefs_.get("chat", "keep") != "off";
+    row(width, "Keep chat logs", "Each match's messages are saved on this computer only, never uploaded.", 60.0f, 36.0f, [&] {
+        if (ui::toggle("##chat_keep", keep) != keep) {
+            prefs_.set("chat", "keep", keep ? "off" : "on");
+            prefs_.save();
+        }
+    });
+    inset_separator(width);
+    row(width, "Chat logs folder", "One file a match, with the time of each message.", 150.0f, 36.0f, [&] {
+        if (ui::button("Open folder", Kind::Secondary, 150.0f)) {
+            std::error_code error;
+            std::filesystem::create_directories(chat_folder(), error);
+            SDL_OpenURL(file_url(chat_folder()).c_str());
+        }
+    });
     card.end();
 }
 

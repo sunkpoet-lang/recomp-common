@@ -267,6 +267,11 @@ private:
     // Online play (launcher::Description::Online): the ONLINE card, and one room at a time, its tunnel (cps-tunel
     // beside the launcher) and its game started together
     void tunnel_card(size_t which, float width);
+    // (this fork) ForkAde's in-game chat: the player's name, whether each match's chat is kept, and its folder; and
+    // what a game played through the tunnel is given for it (--nick, --chat-log)
+    void chat_card(float width);
+    std::vector<std::string> chat_arguments() const;
+    std::filesystem::path chat_folder() const;
     void open_room(size_t which, bool host);
     void close_room(const std::string& message);  // (the game and the tunnel stopped; `message` shown on the card)
     void watch_room();                             // every frame: the tunnel's new lines, the game or the tunnel ended
