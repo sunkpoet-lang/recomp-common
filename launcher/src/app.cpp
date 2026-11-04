@@ -1956,7 +1956,7 @@ void App::play_cards(size_t which, float width, bool ready) {
                                  ? desktop_message_
                                  : "Puts \"" + name + "\" on your desktop: a double click starts the game straight away, with its own icon.";
         row(width, "Shortcut on the desktop", detail.c_str(), 150.0f, 36.0f, [&] {
-            if (ui::button("Add shortcut", Kind::Secondary, 150.0f, file_ok && have_program)) {
+            if (ui::button("Add shortcut", Kind::Secondary, 150.0f, ready)) {
                 desktop_message_id_ = one.id;
                 add_to_desktop(desktop_message_, name, collection_ ? "--play " + one.id : std::string("--play"), one.program());
             }
@@ -2001,7 +2001,7 @@ void App::open_room(size_t which, bool host) {
         room_message_ = "Paste the room code your friend sent you first.";
         return;
     }
-    std::vector<std::string> args = host ? std::vector<std::string>{"host", "--game-port", std::to_string(one.about->online.port)}
+    std::vector<std::string> args = host ? std::vector<std::string>{"host", "--game-port", std::to_string(one.about->tunnel.port)}
                                          : std::vector<std::string>{"join", code};
     args.push_back("--parent");  // (it ends with the launcher, however the launcher ends)
     args.push_back(std::to_string(own_process_id()));
@@ -2025,7 +2025,7 @@ void App::open_room(size_t which, bool host) {
     tunnel_room_.game = which;
     if (host) {
         // (the game waits for a player by itself; the code shows when the tunnel has it)
-        play(which, one.about->online.arguments(""));
+        play(which, one.about->tunnel.arguments(""));
         tunnel_room_.started = true;
         if (!one.play_error.empty()) {
             close_room(one.play_error);
@@ -2073,7 +2073,7 @@ void App::room_line(const std::string& line) {
         tunnel_room_.code = rest;
     } else if (word == "LISTEN" && !tunnel_room_.host && !tunnel_room_.started) {
         // the tunnel listens: the game joins it
-        play(tunnel_room_.game, slots_[tunnel_room_.game]->about->online.arguments("127.0.0.1:" + rest));
+        play(tunnel_room_.game, slots_[tunnel_room_.game]->about->tunnel.arguments("127.0.0.1:" + rest));
         tunnel_room_.started = true;
         if (!slots_[tunnel_room_.game]->play_error.empty()) {
             close_room(slots_[tunnel_room_.game]->play_error);
@@ -2141,7 +2141,7 @@ void App::tunnel_card(size_t which, float width) {
     const ui::Palette& p = ui::palette();
     Slot& one = *slots_[which];
     static const bool tunnel = std::filesystem::exists(tunnel_path());
-    if (one.about->online.port == 0 || !tunnel) {
+    if (one.about->tunnel.port == 0 || !tunnel) {
         return;
     }
     bool here = tunnel_room_.game == which;
