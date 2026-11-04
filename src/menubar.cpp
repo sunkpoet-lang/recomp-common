@@ -712,4 +712,26 @@ Menu::Chosen ChooseMenuEntry(int id, const MenuConfig &config, Menu &menu) {
     return {};
 }
 
+void AddChatEntries(std::vector<BarMenu> &menus, int chatId, int historyId, const std::string &key, bool online) {
+    auto game = std::find_if(menus.begin(), menus.end(), [](const BarMenu &m) { return m.title == "Game"; });
+    if (game == menus.end()) {
+        menus.insert(menus.begin(), BarMenu{"Game", {}});
+        game = menus.begin();
+    }
+    if (!game->entries.empty() && !game->entries.back().IsLine()) {
+        game->entries.push_back(BarEntry::Line());
+    }
+    BarEntry chat;
+    chat.label = "Chat";
+    chat.shortcut = key;
+    chat.id = chatId;
+    chat.enabled = online;
+    BarEntry history;
+    history.label = "Chat history";
+    history.id = historyId;
+    history.enabled = online;
+    game->entries.push_back(chat);
+    game->entries.push_back(history);
+}
+
 } // namespace recomp

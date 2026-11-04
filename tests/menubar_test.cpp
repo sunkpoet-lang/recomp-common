@@ -409,6 +409,23 @@ int main() {
         CHECK(fromMenu.IsOpen());
     }
 
+    // (ForkAde's fork) The chat's entries: at the end of Game after a line, dim offline
+    {
+        std::vector<BarMenu> menus = {{"Game", {}}, {"Video", {}}};
+        BarEntry quit;
+        quit.label = "Quit game";
+        quit.id = 9;
+        menus[0].entries.push_back(quit);
+        AddChatEntries(menus, 20, 21, "Y", true);
+        CHECK(menus[0].entries.size() == 4 && menus[0].entries[1].IsLine());
+        CHECK(menus[0].entries[2].label == "Chat" && menus[0].entries[2].shortcut == "Y" && menus[0].entries[2].id == 20);
+        CHECK(menus[0].entries[3].label == "Chat history" && menus[0].entries[3].enabled);
+        std::vector<BarMenu> offline = {{"Video", {}}};
+        AddChatEntries(offline, 20, 21, "T", false);
+        CHECK(offline.size() == 2 && offline[0].title == "Game" && offline[0].entries.size() == 2);
+        CHECK(!offline[0].entries[0].enabled && !offline[0].entries[1].enabled);
+    }
+
     printf("menubar_test: all as it should be\n");
     return 0;
 }

@@ -170,4 +170,8 @@ bool IsMenuEntry(int id);
 // the host is to do is returned as Menu::Buttons would (Save and Load with the menu's slot set to the one chosen)
 Menu::Chosen ChooseMenuEntry(int id, const MenuConfig &config, Menu &menu);
 
+// (ForkAde's fork) The in-game chat's entries at the end of "Game" (added if missing), after a line: "Chat" with
+// its key ("T" or "Y") and "Chat history", dim outside an online match
+void AddChatEntries(std::vector<BarMenu> &menus, int chatId, int historyId, const std::string &key, bool online);
+
 } // namespace recomp
