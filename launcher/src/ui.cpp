@@ -358,6 +358,53 @@ bool toggle(const char* id_text, bool value) {
     return pressed;
 }
 
+bool slider(const char* id_text, int& value, float width) {
+    ImGuiContext& g = *GImGui;
+    ImGuiWindow* window = ImGui::GetCurrentWindow();
+    ImGuiID id = window->GetID(id_text);
+    ImVec2 box(px(width), px(24));
+    ImRect rect(window->DC.CursorPos, window->DC.CursorPos + box);
+    bool hovered = false;
+    bool held = false;
+    behavior(rect, id, true, hovered, held);
+    const Palette& p = palette();
+    const float label = px(46), radius = px(9);
+    const float left = rect.Min.x + radius, right = rect.Max.x - label - radius;
+    int now = value;
+    if (held) {
+        const float t = std::clamp((ImGui::GetIO().MousePos.x - left) / std::max(1.0f, right - left), 0.0f, 1.0f);
+        now = static_cast<int>(std::lround(t * 20.0f)) * 5;
+    }
+    if (g.NavId == id && g.NavCursorVisible) {
+        if (ImGui::IsKeyPressed(ImGuiKey_LeftArrow) || ImGui::IsKeyPressed(ImGuiKey_GamepadDpadLeft)) {
+            now -= 5;
+        }
+        if (ImGui::IsKeyPressed(ImGuiKey_RightArrow) || ImGui::IsKeyPressed(ImGuiKey_GamepadDpadRight)) {
+            now += 5;
+        }
+    }
+    now = std::clamp(now, 0, 100);
+    const float hover = animate(id + 1, hovered || held ? 1.0f : 0.0f, 22.0f);
+    const float shown = animate(id + 2, static_cast<float>(now), 24.0f);
+    const float y = rect.Min.y + box.y * 0.5f, track = px(4);
+    const float x = left + (right - left) * shown / 100.0f;
+    window->DrawList->AddRectFilled(ImVec2(left, y - track * 0.5f), ImVec2(right, y + track * 0.5f),
+                                    mix(p.control_active, p.tertiary, hover * 0.35f), track * 0.5f);
+    window->DrawList->AddRectFilled(ImVec2(left, y - track * 0.5f), ImVec2(x, y + track * 0.5f), p.primary, track * 0.5f);
+    window->DrawList->AddCircleFilled(ImVec2(x, y + px(1)), radius, IM_COL32(0, 0, 0, 30), 32);
+    window->DrawList->AddCircleFilled(ImVec2(x, y), radius, g_dark ? p.text : IM_COL32(255, 255, 255, 255), 32);
+    char level[8];
+    snprintf(level, sizeof(level), "%d%%", now);
+    push_font(Font::Regular, size::kDetail);
+    const ImVec2 wide = ImGui::CalcTextSize(level);
+    window->DrawList->AddText(ImVec2(rect.Max.x - wide.x, y - wide.y * 0.5f), p.secondary, level);
+    pop_font();
+    focus_ring(rect, id, box.y * 0.5f);
+    const bool changed = now != value;
+    value = now;
+    return changed;
+}
+
 void chevron(ImVec2 center, float value, ImU32 ink, bool down) {
     float h = value * 0.5f;
     ImDrawList* list = ImGui::GetWindowDrawList();

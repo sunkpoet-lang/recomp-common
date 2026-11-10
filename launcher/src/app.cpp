@@ -36,6 +36,7 @@
 #include "online.h"
 #include "steam.h"
 #include "ui.h"
+#include "volume.h"
 
 using launcher::FileCheck;
 using layout::Card;
@@ -257,6 +258,16 @@ std::vector<std::string> arguments_for(const recomp::Ini& prefs, const Target& t
     std::vector<std::string> arguments = about.arguments(launch);
     if (about.mute_argument && prefs.get("audio", "muted") == "1") {
         arguments.push_back(about.mute_argument);
+    }
+    if (about.volume_argument) {
+        // (the level the game kept, if it kept one: game-volume-control)
+        recomp::Ini kept(target.folder / "settings.ini");
+        kept.load();
+        const std::string level = kept.get("audio", "volume");
+        if (!level.empty()) {
+            arguments.push_back(about.volume_argument);
+            arguments.push_back(std::to_string(recomp::ClampVolume(std::atoi(level.c_str()))));
+        }
     }
     for (const launcher::FolderChoice& folder : about.folders) {
         std::string chosen = prefs.get(target.file_section, folder.key);
@@ -2117,7 +2128,7 @@ void App::display_cards(size_t which, float width) {
         }
         display.end();
     }
-    if (one.about->mute_argument || !one.about->folders.empty()) {
+    if (one.about->mute_argument || one.about->volume_argument || !one.about->folders.empty()) {
         ui::gap(24);
         ui::text("SOUND", Font::Semibold, ui::size::kDetail, p.secondary);
         ui::gap(10);
@@ -2132,6 +2143,30 @@ void App::display_cards(size_t which, float width) {
                     if (ui::toggle("##muted", muted)) {
                         prefs_.set("audio", "muted", muted ? "0" : "1");
                         prefs_.save();
+                    }
+                });
+        }
+        if (one.about->volume_argument) {
+            // (the game's own level, in its settings.ini; not while it runs, which writes it when it ends)
+            if (!first) {
+                inset_separator(width);
+            }
+            first = false;
+            const std::string kept = one.settings.get("audio", "volume");
+            int level = kept.empty() ? 100 : recomp::ClampVolume(std::atoi(kept.c_str()));
+            const bool running = one.game.running();
+            row(width, "Volume",
+                running ? "The game is running: its menu, or - and =, change the level." : "The level the game starts at. In the game, - and = change it.",
+                220.0f, 24.0f, [&] {
+                    if (running) {
+                        ImGui::BeginDisabled();
+                    }
+                    if (ui::slider("##volume", level, 220.0f) && !running) {
+                        one.settings.set("audio", "volume", std::to_string(level));
+                        one.settings.save();
+                    }
+                    if (running) {
+                        ImGui::EndDisabled();
                     }
                 });
         }

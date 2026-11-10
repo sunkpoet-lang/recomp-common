@@ -195,6 +195,10 @@ struct Description {
     // launcher.ini under [audio]). When it is on the game is started with this argument after the port's
     // own. nullptr: no card (a game with no sound to switch off).
     const char *mute_argument = "--mute";
+    // ... and below it a sound level, 0 to 100 percent (game-volume-control): the game keeps it in its settings.ini
+    // under [audio] volume, which the slider shows and changes, and it is started with this argument and the level.
+    // nullptr: no level (a program with a volume of its own, or older than --volume)
+    const char *volume_argument = "--volume";
     // ... and below it, folders the player may choose (none: only the switch)
     std::vector<FolderChoice> folders;
 

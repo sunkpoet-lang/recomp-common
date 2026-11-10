@@ -5,6 +5,9 @@ a minor version. A port's copy only changes when it runs `tools/sync-common.sh`.
 
 ## Unreleased
 
+- **A sound level on the launcher's Sound card** (`ui::slider`, `GameDescription::volume_argument`): below Muted, 0 to
+  100 percent in fives, read from and kept in the game's own settings.ini (`[audio] volume`), so a level changed in
+  the game shows there too; the game is started with `--volume N`. Not while it runs. nullptr: no slider.
 - **No console window beside the launcher on Windows** (from Fileover, cps2recomp #208): it is built as a windowed
   program, as the games are; started from a terminal, it attaches to that terminal's console for its output.
 - **The menu and the launcher in the player's language** (`i18n.h`): English, Brazilian Portuguese (`pt-BR`) and Spanish
