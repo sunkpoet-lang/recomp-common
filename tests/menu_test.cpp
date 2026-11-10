@@ -3,6 +3,7 @@
 // The menu's rules, without a picture to compare: what rows there are, what the buttons do, and that
 // drawing stays inside the picture at any size.
 #include "menu.h"
+#include "volume.h"
 
 #include <cstdio>
 #include <cstdlib>
@@ -268,6 +269,49 @@ int main() {
         Press(nested, {kMenuConfirm});
         CHECK(g_values[0] == 1);
         g_values.clear();
+    }
+    // (ForkAde's fork, game-volume-control) The level's curve: silent at 0, exactly the game's sound at 100, louder
+    // at every step between, half the slider about -10 dB; the steps kept to 0-100 in fives
+    {
+        CHECK(VolumeGain(0) == 0.0f && VolumeGain(100) == 1.0f);
+        float before = 0.0f;
+        for (int percent = kVolumeStep; percent <= kVolumeFull; percent += kVolumeStep) {
+            CHECK(VolumeGain(percent) > before);
+            before = VolumeGain(percent);
+        }
+        CHECK(VolumeGain(50) > 0.30f && VolumeGain(50) < 0.33f);
+        CHECK(StepVolume(100, 1) == 100 && StepVolume(0, -1) == 0 && StepVolume(100, -2) == 90 && StepVolume(42, 0) == 40);
+        CHECK(ClampVolume(-7) == 0 && ClampVolume(250) == 100 && ClampVolume(97) == 95);
+    }
+    // ... and the Sound row: Left and Right the level (turning the sound back on), a press muting and unmuting;
+    // without the level's functions it is the Mute row it was
+    {
+        int level = 100;
+        bool muted = false;
+        MenuConfig c;
+        c.groups = {{{MenuRow::Mute}, {MenuRow::Quit}}};
+        c.muted = [&] { return muted; };
+        c.setMuted = [&](bool on) { muted = on; };
+        c.volume = [&] { return level; };
+        c.setVolume = [&](int percent) { level = percent; };
+        Menu sound;
+        sound.Configure(c);
+        sound.Open();
+        Press(sound, {kMenuLeft, kMenuLeft});
+        CHECK(level == 90 && !muted);
+        Press(sound, {kMenuConfirm});
+        CHECK(muted && level == 90);
+        Press(sound, {kMenuRight});
+        CHECK(!muted && level == 95);
+        Press(sound, {kMenuRight, kMenuRight});
+        CHECK(level == 100);
+        c.volume = nullptr;
+        c.setVolume = nullptr;
+        Menu old;
+        old.Configure(c);
+        old.Open();
+        Press(old, {kMenuLeft});
+        CHECK(level == 100 && muted);
     }
 
     puts("menu_test: all as it should be");
