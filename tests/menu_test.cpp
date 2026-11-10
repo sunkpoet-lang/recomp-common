@@ -314,6 +314,77 @@ int main() {
         CHECK(level == 100 && muted);
     }
 
+    {
+        // The arrows held repeat: the first frame a press, then nothing until kRepeatAfter, then every kRepeatEvery
+        // (faster after kFasterAfter); Confirm held does not repeat, and anything else gone down starts over
+        MenuRepeat repeat;
+        CHECK(repeat.Step(kMenuDown) == kMenuDown);
+        int presses = 0;
+        for (int frame = 1; frame < MenuRepeat::kRepeatAfter; frame++) {
+            presses += repeat.Step(kMenuDown) != 0;
+        }
+        CHECK(presses == 0);
+        CHECK(repeat.Step(kMenuDown) == kMenuDown);
+        presses = 0;
+        for (int frame = MenuRepeat::kRepeatAfter + 1; frame <= MenuRepeat::kFasterAfter; frame++) {
+            presses += repeat.Step(kMenuDown) != 0;
+        }
+        CHECK(presses == (MenuRepeat::kFasterAfter - MenuRepeat::kRepeatAfter) / MenuRepeat::kRepeatEvery + 1); // (and the faster one at kFasterAfter)
+        CHECK(repeat.Step(kMenuDown) == 0 && repeat.Step(kMenuDown) == kMenuDown); // (every kFasterEvery now)
+        CHECK(repeat.Step(0) == 0);
+        CHECK(repeat.Step(kMenuConfirm) == kMenuConfirm);
+        for (int frame = 0; frame < 100; frame++) {
+            CHECK(repeat.Step(kMenuConfirm) == 0);
+        }
+        CHECK(repeat.Step(kMenuConfirm | kMenuUp) == kMenuUp); // (Up gone down: pressed, Confirm still held)
+    }
+
+    {
+        // A favourites feature: a row under it; Confirm marks the stage shown, or not; the favourites row goes
+        // through the marked alone, around; without the host's favourites it is any other feature
+        std::map<int, bool> marked;
+        MenuConfig c;
+        c.groups = {{{MenuRow::Pages}, {MenuRow::Resume}}};
+        c.features = {{"Training", "Stage", "Where to fight.", {"Random", "Ryu's", "Ken's", "Akuma's", "Guy's"}, true}};
+        c.value = [](size_t feature) { return g_values[feature]; };
+        c.setValue = [](size_t feature, int value) { g_values[feature] = value; };
+        c.favourite = [&](size_t, int choice) { return marked[choice]; };
+        c.setFavourite = [&](size_t, int choice, bool on) { marked[choice] = on; };
+        Menu menu;
+        menu.Configure(c);
+        menu.Open();
+        Press(menu, {kMenuConfirm}); // (into Training: Stage, Stage: favourites, Back)
+        Press(menu, {kMenuConfirm, kMenuConfirm}); // (the first, marked and not again)
+        CHECK(!marked[0]);
+        Press(menu, {kMenuRight, kMenuRight, kMenuConfirm}); // (Ken's)
+        CHECK(marked[2]);
+        Press(menu, {kMenuRight, kMenuRight, kMenuConfirm}); // (Guy's)
+        CHECK(marked[4] && g_values[0] == 4);
+        Press(menu, {kMenuLeft, kMenuLeft, kMenuLeft, kMenuLeft}); // (Random)
+        Press(menu, {kMenuDown, kMenuRight});
+        CHECK(g_values[0] == 2);
+        Press(menu, {kMenuRight});
+        CHECK(g_values[0] == 4);
+        Press(menu, {kMenuRight});
+        CHECK(g_values[0] == 2);
+        Press(menu, {kMenuLeft});
+        CHECK(g_values[0] == 4);
+        Press(menu, {kMenuUp, kMenuConfirm}); // (Guy's no longer)
+        CHECK(!marked[4]);
+        Press(menu, {kMenuDown, kMenuRight, kMenuRight});
+        CHECK(g_values[0] == 2);
+        // (no favourites from the host: no row under it, Confirm goes on to the next as before)
+        c.favourite = nullptr;
+        Menu plain;
+        plain.Configure(c);
+        plain.Open();
+        Press(plain, {kMenuConfirm, kMenuConfirm});
+        CHECK(g_values[0] == 3);
+        Press(plain, {kMenuDown, kMenuConfirm}); // (Back, not a favourites row)
+        CHECK(Press(plain, {kMenuDown, kMenuConfirm}).kind == Menu::Chosen::None && !plain.IsOpen());
+        g_values.clear();
+    }
+
     puts("menu_test: all as it should be");
     return 0;
 }

@@ -5,6 +5,28 @@ a minor version. A port's copy only changes when it runs `tools/sync-common.sh`.
 
 ## Unreleased
 
+- **No console window beside the launcher on Windows** (from Fileover, cps2recomp #208): it is built as a windowed
+  program, as the games are; started from a terminal, it attaches to that terminal's console for its output.
+- **The menu and the launcher in the player's language** (`i18n.h`): English, Brazilian Portuguese (`pt-BR`) and Spanish
+  (`es`). Every word is written in English where it is used and looked up where it is drawn (`Tr`, and `TrFormat` for a
+  text with `{}` in it), so a port's own rows, features and launcher pages are translated by the tables it adds
+  (`i18n::Add`); a text no table has stays in English. The launcher's Game page (a collection's Games page) has a
+  **Language** choice (the system's, or one of them), kept in launcher.ini's `[launcher] language` and handed to the
+  games it starts in `RECOMP_LANGUAGE`; a game started on its own takes that or the system's (`i18n::Resolve`,
+  `FromEnvironment`). `RECOMP_I18N_MISSING=FILE` lists the texts drawn that the language's tables do not have.
+- **The menu's font is UTF-8 and has Latin-1's accented letters** (á, ã, ç, é, ñ, ü..., ¿ ¡ º ª), drawn as their letter
+  and a mark (over a capital, two rows above its cell; `text.h`).
+
+- **The menu's arrows repeat while held** (`MenuRepeat`, C `rmenu_repeat`): a host gives it what is down each frame and
+  gets the presses, Up, Down, Left and Right again after a moment's hold, and faster after a second.
+- **Favourites in the menu** (`MenuFeature::favourites`, `MenuConfig::favourite` and `setFavourite`): a long choice
+  (stages, say) whose Confirm marks the one shown a favourite, with a row under it that goes through the favourites
+  alone. The host keeps them.
+- **An Online page for a launcher of one game** (`Description::online_page`): hosting, joining, the lobby and the
+  waiting room on a page of their own after Game, as a collection's Online page has them, rather than a card on the
+  Game page. **The port's own pages after Game** (`Description::own_pages_after_game`): Game, Online, then the
+  port's pages, then Features and Controllers. `App::single_layout()` gives a one-game launcher's pages in order.
+- **The update card at the top of the Game page**, new version or not, as a collection's Games page has it.
 - **Paths with accents on Windows** (cps2recomp #223): SDL's paths and the ports' are UTF-8, and a
   `std::filesystem::path` made from a narrow string reads it in the system's code page there, so a folder named with an
   é, ã or ç was another folder. `Ini` takes a path given as text (`std::string`, `const char *`) as UTF-8,

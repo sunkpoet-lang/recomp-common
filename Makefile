@@ -7,9 +7,10 @@ CXXFLAGS := -std=c++17 -O2 -Wall -Wextra -Wpedantic -Isrc
 B := build
 
 .PHONY: test example launcher launcher-shots audit clean
-test: $(B)/menu_test $(B)/menubar_test $(B)/c_test $(B)/settings_test $(B)/settings_c_test $(B)/folders_test $(B)/proxy_test $(B)/update_test $(B)/chat_test
+test: $(B)/menu_test $(B)/menubar_test $(B)/i18n_test $(B)/c_test $(B)/settings_test $(B)/settings_c_test $(B)/folders_test $(B)/proxy_test $(B)/update_test $(B)/chat_test
 	@$(B)/menu_test
 	@$(B)/menubar_test
+	@$(B)/i18n_test
 	@$(B)/c_test
 	@$(B)/settings_test
 	@cd $(B) && ./settings_c_test > /dev/null && echo "settings_c_test: all as it should be"
@@ -18,7 +19,7 @@ test: $(B)/menu_test $(B)/menubar_test $(B)/c_test $(B)/settings_test $(B)/setti
 	@$(B)/update_test
 	@$(B)/chat_test
 
-$(B)/menu_test: tests/menu_test.cpp src/menu.cpp src/menu.h src/text.h
+$(B)/menu_test: tests/menu_test.cpp src/menu.cpp src/menu.h src/text.h src/i18n.h src/i18n_pt_br.h src/i18n_es.h
 	@mkdir -p $(B)
 	$(CXX) $(CXXFLAGS) -fsanitize=address,undefined tests/menu_test.cpp src/menu.cpp -o $@
 
@@ -26,9 +27,13 @@ $(B)/menu_test: tests/menu_test.cpp src/menu.cpp src/menu.h src/text.h
 $(B)/menubar_test: tests/menubar_test.cpp src/menubar.cpp src/menubar.h src/menu.cpp src/menu.h src/text.h
 	@mkdir -p $(B)
 	$(CXX) $(CXXFLAGS) -fsanitize=address,undefined tests/menubar_test.cpp src/menubar.cpp src/menu.cpp -o $@
+# The words in the player's language, and the font's accented letters
+$(B)/i18n_test: tests/i18n_test.cpp src/i18n.h src/i18n_pt_br.h src/i18n_es.h src/text.h
+	@mkdir -p $(B)
+	$(CXX) $(CXXFLAGS) -fsanitize=address,undefined tests/i18n_test.cpp -o $@
 
 # (the C interface, from a host compiled as C)
-$(B)/c_test: tests/c_test.c src/menu.cpp src/menu_c.cpp src/menu_c.h src/menu.h src/text.h
+$(B)/c_test: tests/c_test.c src/menu.cpp src/menu_c.cpp src/menu_c.h src/menu.h src/text.h src/i18n.h
 	@mkdir -p $(B)
 	$(CC) -std=c99 -Wall -Wextra -Wpedantic -Isrc -c tests/c_test.c -o $(B)/c_test.o
 	$(CXX) $(CXXFLAGS) $(B)/c_test.o src/menu.cpp src/menu_c.cpp -o $@
@@ -65,7 +70,7 @@ $(B)/update_test: tests/update_test.cpp launcher/src/update.cpp launcher/src/upd
 
 # A host with no game: build/shot OUT.ppm [KEYS] [WIDTHxHEIGHT] (examples/shot.cpp)
 example: $(B)/shot
-$(B)/shot: examples/shot.cpp src/menu.cpp src/menu.h src/text.h
+$(B)/shot: examples/shot.cpp src/menu.cpp src/menu.h src/text.h src/i18n.h src/i18n_pt_br.h src/i18n_es.h
 	@mkdir -p $(B)
 	$(CXX) $(CXXFLAGS) examples/shot.cpp src/menu.cpp -o $@
 

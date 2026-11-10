@@ -6,6 +6,7 @@
 //
 //   shot OUT.ppm [KEYS] [WIDTHxHEIGHT]     KEYS: u d l r (the directions), a (confirm), b (back)
 //   shot menu.ppm dddda 896x672
+#include "i18n.h"
 #include "menu.h"
 
 #include <cstdio>
@@ -59,6 +60,8 @@ int main(int argc, char **argv) {
         return 2;
     }
 
+    // (in the language RECOMP_LANGUAGE names, as a game the launcher starts: i18n.h)
+    recomp::i18n::SetLanguage(recomp::i18n::Resolve("", recomp::i18n::FromEnvironment()));
     Menu menu;
     menu.Configure(Config());
     menu.Open();

@@ -85,6 +85,17 @@ int main(void) {
   rmenu_buttons(menu, RMENU_BACK, NULL);
   CHECK(!rmenu_isOpen(menu));
   rmenu_free(menu);
+  {
+    /* the arrows held repeat: a press, then none until 18 frames, then one */
+    RMenuRepeat repeat = {0, 0};
+    int presses = 0;
+    CHECK(rmenu_repeat(&repeat, RMENU_DOWN) == RMENU_DOWN);
+    for (int frame = 1; frame < 18; frame++) {
+      presses += rmenu_repeat(&repeat, RMENU_DOWN) != 0;
+    }
+    CHECK(presses == 0);
+    CHECK(rmenu_repeat(&repeat, RMENU_DOWN) == RMENU_DOWN);
+  }
   puts("c_test: all as it should be");
   return 0;
 }

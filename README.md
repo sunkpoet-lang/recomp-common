@@ -43,6 +43,9 @@ To play a game, download a port; this repository is for people making ports.
 - Six buttons: up, down, left, right, confirm, back. The port maps its own onto them.
 - Any picture size: sizes follow the picture's height, and where the rows do not all fit, the ones
   about the chosen row are shown.
+- **In the player's language**: English, Brazilian Portuguese or Spanish, chosen in the launcher (or the system's), in
+  the menu and the launcher alike (`i18n.h`). A port adds tables for its own words; a text no table has stays in
+  English. The menu's font has the accented letters.
 
 ![A page of features](docs/menu-page.png)
 
