@@ -15,6 +15,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <future>
+#include <tuple>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -393,7 +394,7 @@ private:
     std::string join_said_;
     int join_needs_ = -1;  // (a game whose file must be chosen first: Add…)  // the player's name, as the lobby shows a match they host ([online] name)
     // (the lobby's list: fetched every few seconds while the card is shown, on another thread)
-    std::future<std::pair<bool, std::vector<launcher::OpenMatch>>> lobby_fetch_;
+    std::future<std::tuple<bool, std::vector<launcher::OpenMatch>, int>> lobby_fetch_; // (ok, the list, busy seconds)
     std::vector<launcher::OpenMatch> lobby_;
     std::string lobby_url_;
     bool lobby_failed_ = false;
@@ -403,6 +404,7 @@ private:
     std::future<launcher::Room> room_fetch_;
     launcher::Room room_;
     Uint64 room_at_ = 0;
+    Uint64 busy_until_ = 0; // (ForkAde's fork: the online service asked to be left alone until then, 429)
     bool room_in_ = false;
     bool room_lists_ = true; // (the check-in brings the Online page's lobby list too: until a service answers without it)
     std::vector<std::string> room_answered_;

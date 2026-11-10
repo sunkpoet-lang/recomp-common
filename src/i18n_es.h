@@ -81,6 +81,8 @@ inline constexpr Entry kSpanish[] = {
     {"SOUND", "SONIDO"},
     {"Muted", "Silenciado"},
     {"Volume", "Volumen"},
+    {"The online service is busy: trying again in a few seconds.", "El servicio en línea está ocupado: se vuelve a intentar en unos segundos."},
+    {"The online service is busy: try again in {} seconds.", "El servicio en línea está ocupado: intenta de nuevo en {} segundos."},
     {"The level the game starts at. In the game, - and = change it.", "El nivel con que arranca el juego. En el juego, - y = lo cambian."},
     {"The game is running: its menu, or - and =, change the level.", "El juego está abierto: su menú, o - y =, cambian el nivel."},
     {"Start the games with no sound. A game's menu switches it back on.", "Inicia los juegos sin sonido. El menú de cada juego lo vuelve a activar."},

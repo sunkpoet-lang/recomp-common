@@ -2894,10 +2894,13 @@ void App::follow_lobby(const std::string& url) {
     const Uint64 now = SDL_GetTicks();
     const bool online_page = collection_ && collection_->lobby && url == collection_->lobby;
     if (lobby_fetch_.valid() && lobby_fetch_.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
-        auto [ok, matches] = lobby_fetch_.get();
-        lobby_failed_ = !ok;
+        auto [ok, matches, busy] = lobby_fetch_.get();
+        lobby_failed_ = !ok && busy == 0;
         if (ok) {
             lobby_ = std::move(matches);
+        }
+        if (busy > 0) {
+            busy_until_ = now + static_cast<Uint64>(busy) * 1000;
         }
         lobby_at_ = now;
     }
@@ -2917,11 +2920,12 @@ void App::follow_lobby(const std::string& url) {
     if (online_page && room_in_ && room_lists_) {
         return; // (follow_room's check-in brings it)
     }
-    if (!lobby_fetch_.valid() && (lobby_at_ == 0 || now - lobby_at_ > online_every())) {
+    if (!lobby_fetch_.valid() && now >= busy_until_ && (lobby_at_ == 0 || now - lobby_at_ > online_every())) {
         lobby_fetch_ = std::async(std::launch::async, [url] {
             std::vector<launcher::OpenMatch> matches;
-            const bool ok = launcher::fetch_lobby(url, matches);
-            return std::make_pair(ok, matches);
+            int busy = 0;
+            const bool ok = launcher::fetch_lobby(url, matches, &busy);
+            return std::make_tuple(ok, matches, busy);
         });
     }
 }
@@ -2997,7 +3001,8 @@ void App::online_page(float width) {
     live_label("OPEN MATCHES", width, lobby_fetch_.valid() || (room_in_ && room_lists_ && room_fetch_.valid()));
     Card list(width, any_joinable);
     if (lobby_.empty()) {
-        const char* empty = lobby_failed_    ? "Couldn't reach the online service."
+        const char* empty = SDL_GetTicks() < busy_until_ ? "The online service is busy: trying again in a few seconds."
+                            : lobby_failed_    ? "Couldn't reach the online service."
                             : lobby_at_ == 0 ? "Looking…"
                                              : "None right now. They show here as players host them, up to 10 seconds after.";
         empty_row(width, empty, !lobby_failed_ && lobby_at_ == 0);
@@ -3108,6 +3113,8 @@ void App::online_page(float width) {
                 join_said_ = TrFormat("That's a {} match, which your version of {} hasn't: update to play it.", {found.title, LAUNCHER_GAME_NAME});
             } else if (found.status == 404) {
                 join_said_ = "There's no match with that code. Codes last 30 minutes, and each is good for one match.";
+            } else if (found.busy > 0) {
+                join_said_ = TrFormat("The online service is busy: try again in {} seconds.", {std::to_string(found.busy)});
             } else if (found.status != 0) {
                 join_said_ = found.error.empty() ? "That match can't be joined." : found.error;
             } else {
@@ -3226,6 +3233,9 @@ void App::follow_room(bool here) {
     if (room_fetch_.valid() && room_fetch_.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
         launcher::Room room = room_fetch_.get();
         room_at_ = SDL_GetTicks();
+        if (room.busy > 0) {
+            busy_until_ = room_at_ + static_cast<Uint64>(room.busy) * 1000;
+        }
         if (!room_in_) {
             // (left while it was asked: out again)
             if (room.ok) {
@@ -3247,7 +3257,7 @@ void App::follow_room(bool here) {
                 lobby_at_ = room_at_;
             }
             room_ = std::move(room);
-        } else {
+        } else if (room.busy == 0) {
             room_.ok = false;
             if (room_lists_ && collection_ && collection_->lobby && lobby_url_ == collection_->lobby) {
                 lobby_failed_ = true;
@@ -3267,7 +3277,7 @@ void App::follow_room(bool here) {
         return;
     }
     room_in_ = true;
-    if (room_fetch_.valid() || (room_at_ != 0 && SDL_GetTicks() - room_at_ < online_every())) {
+    if (room_fetch_.valid() || SDL_GetTicks() < busy_until_ || (room_at_ != 0 && SDL_GetTicks() - room_at_ < online_every())) {
         return;
     }
     // (who this player is: a secret of their own, kept, from which the service makes their id)
@@ -3431,6 +3441,7 @@ void App::room_card(float width, const std::vector<size_t>& playable) {
     }
     if (room_.players.empty()) {
         const char* empty = room_at_ == 0 ? "Looking…"
+                            : SDL_GetTicks() < busy_until_ ? "The online service is busy: trying again in a few seconds."
                             : !room_.ok   ? "Couldn't reach the online service."
                             : collection_ ? "Nobody else is here right now. Players show here while their Online page is open, up to 10 seconds "
                                             "after they open it."

@@ -28,12 +28,16 @@ struct OpenMatch {
 };
 // The lobby's list, fetched from `url` with the system's curl (blocks: for another thread); false if there was no
 // answer
-bool fetch_lobby(const std::string& url, std::vector<OpenMatch>& matches);
+bool fetch_lobby(const std::string& url, std::vector<OpenMatch>& matches, int* busy = nullptr);
+// (ForkAde's fork) A service that answers 429 asks to be left alone this many seconds (its "retry", or Retry-After):
+// `busy` says how long, 0 for any other answer
+int busy_seconds(int status, const std::string& body);
 
 // Which game a match's code is for (Collection::code_lookup): the HTTP status (0: no answer), and from a 200 the
 // game's id and name, or from another the service's error
 struct CodeLookup {
     int status = 0;
+    int busy = 0; // (429: the seconds to wait, busy_seconds)
     std::string game, title, version, error;
 };
 CodeLookup lookup_code(const std::string& url);
@@ -68,6 +72,7 @@ struct Room {
     std::vector<Invitation> invitations;
     bool listed = false; // (the lobby's list came with it: asked for (RoomCheckIn::lobby), and from a service that says it)
     std::vector<OpenMatch> matches;
+    int busy = 0; // (the service asked to be left alone this many seconds: busy_seconds)
 };
 // A check-in at `url` (blocks: for another thread)
 Room room_check_in(const std::string& url, const RoomCheckIn& me);

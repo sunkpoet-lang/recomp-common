@@ -5,6 +5,9 @@ a minor version. A port's copy only changes when it runs `tools/sync-common.sh`.
 
 ## Unreleased
 
+- **The launcher waits when the online service is busy** (`launcher::busy_seconds`): a 429 from the waiting room, the
+  lobby or a code lookup is waited out for its `retry` seconds (10 if none, at most 600) with "The online service is
+  busy" said, and what was shown is kept.
 - **A palette and a small font for an online match's readout** (`text.h`: `Palette`, `kSmallFont`,
   `SmallTextWidth`, `Canvas::SmallText`): player 1 blue, player 2 red, the connection data yellow; a 3x5 font of
   capitals, digits and space in a 4x6 cell. `tests/text_test.cpp`.

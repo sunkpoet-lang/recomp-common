@@ -125,6 +125,7 @@ CodeLookup lookup_code(const std::string& url) {
     }
     out.status = std::atoi(body.c_str() + line + 1);
     body.resize(line);
+    out.busy = busy_seconds(out.status, body);
     const auto text = [&](const char* key) {
         std::string value;
         const size_t at = body.find(std::string("\"") + key + "\":\"");
@@ -239,6 +240,17 @@ int Post(const std::string& url, const std::string& body, std::string* answer) {
     return run_program(curl_program(), {"-sS", "--max-time", "8", "-X", "POST", "-H", "content-type: application/json", "--data-binary", body, url}, answer);
 }
 
+// (the answer's HTTP status put after it on a line of its own, then taken off: 0 if there is none)
+int StatusOff(std::string& answer) {
+    const size_t line = answer.rfind('\n');
+    if (line == std::string::npos) {
+        return 0;
+    }
+    const int status = std::atoi(answer.c_str() + line + 1);
+    answer.resize(line);
+    return status;
+}
+
 // {"matches":[{"game","title","version","code","name","waiting"}, ...]}: the lobby's list in the service's answer (cps2recomp's
 // online/), alone or in a waiting room check-in's
 std::vector<OpenMatch> Matches(const std::string& json) {
@@ -261,9 +273,25 @@ void PostAway(const std::string& url, const std::string& body) {
 }
 }  // namespace
 
-bool fetch_lobby(const std::string& url, std::vector<OpenMatch>& matches) {
+int busy_seconds(int status, const std::string& body) {
+    if (status != 429) {
+        return 0;
+    }
+    const size_t at = body.find("\"retry\":");
+    const int said = at == std::string::npos ? 0 : std::atoi(body.c_str() + at + 8);
+    return std::clamp(said > 0 ? said : 10, 1, 600);
+}
+
+bool fetch_lobby(const std::string& url, std::vector<OpenMatch>& matches, int* busy) {
     std::string json;
-    if (run_program(curl_program(), {"-sS", "--max-time", "8", url}, &json) != 0 || json.find("\"matches\"") == std::string::npos) {
+    if (run_program(curl_program(), {"-sS", "--max-time", "8", "-w", "\n%{http_code}", url}, &json) != 0) {
+        return false;
+    }
+    const int status = StatusOff(json);
+    if (busy) {
+        *busy = busy_seconds(status, json);
+    }
+    if (json.find("\"matches\"") == std::string::npos) {
         return false;
     }
     matches = Matches(json);
@@ -277,7 +305,12 @@ Room room_check_in(const std::string& url, const RoomCheckIn& me) {
                              ",\"invitable\":" + (me.invitable ? "true" : "false") + ",\"blocked\":" + QuotedList(me.blocked) +
                              (me.lobby ? ",\"lobby\":true}" : "}");
     std::string json;
-    if (Post(url, body, &json) != 0 || json.find("\"players\"") == std::string::npos) {
+    if (run_program(curl_program(), {"-sS", "--max-time", "8", "-w", "\n%{http_code}", "-X", "POST", "-H", "content-type: application/json", "--data-binary", body, url},
+                    &json) != 0) {
+        return room;
+    }
+    room.busy = busy_seconds(StatusOff(json), json);
+    if (json.find("\"players\"") == std::string::npos) {
         return room;
     }
     // {"id":"...","players":[{"id","name","games":[...]}],"invitations":[{"code","from","name","game","title","version"}]}:
