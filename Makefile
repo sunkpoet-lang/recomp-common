@@ -7,7 +7,7 @@ CXXFLAGS := -std=c++17 -O2 -Wall -Wextra -Wpedantic -Isrc
 B := build
 
 .PHONY: test example launcher launcher-shots audit clean
-test: $(B)/menu_test $(B)/menubar_test $(B)/i18n_test $(B)/c_test $(B)/settings_test $(B)/settings_c_test $(B)/folders_test $(B)/proxy_test $(B)/update_test $(B)/chat_test
+test: $(B)/menu_test $(B)/menubar_test $(B)/i18n_test $(B)/c_test $(B)/settings_test $(B)/settings_c_test $(B)/folders_test $(B)/proxy_test $(B)/update_test $(B)/chat_test $(B)/text_test
 	@$(B)/menu_test
 	@$(B)/menubar_test
 	@$(B)/i18n_test
@@ -18,6 +18,7 @@ test: $(B)/menu_test $(B)/menubar_test $(B)/i18n_test $(B)/c_test $(B)/settings_
 	@$(B)/proxy_test
 	@$(B)/update_test
 	@$(B)/chat_test
+	@$(B)/text_test
 
 $(B)/menu_test: tests/menu_test.cpp src/menu.cpp src/menu.h src/text.h src/i18n.h src/i18n_pt_br.h src/i18n_es.h
 	@mkdir -p $(B)
@@ -52,6 +53,11 @@ $(B)/settings_c_test: tests/settings_c_test.c src/settings.cpp src/settings_c.cp
 $(B)/chat_test: tests/chat_test.cpp src/chat.cpp src/chat.h src/text.h
 	@mkdir -p $(B)
 	$(CXX) $(CXXFLAGS) -std=c++20 -fsanitize=address,undefined tests/chat_test.cpp src/chat.cpp -o $@
+
+# (ForkAde's fork) The small font and the palette of an online match's readout (text.h)
+$(B)/text_test: tests/text_test.cpp src/text.h
+	@mkdir -p $(B)
+	$(CXX) $(CXXFLAGS) -fsanitize=address,undefined tests/text_test.cpp -o $@
 
 # The proxy Windows is set to use, for curl (proxy.h)
 $(B)/proxy_test: tests/proxy_test.cpp src/proxy.h

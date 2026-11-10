@@ -5,6 +5,9 @@ a minor version. A port's copy only changes when it runs `tools/sync-common.sh`.
 
 ## Unreleased
 
+- **A palette and a small font for an online match's readout** (`text.h`: `Palette`, `kSmallFont`,
+  `SmallTextWidth`, `Canvas::SmallText`): player 1 blue, player 2 red, the connection data yellow; a 3x5 font of
+  capitals, digits and space in a 4x6 cell. `tests/text_test.cpp`.
 - **A sound level on the launcher's Sound card** (`ui::slider`, `GameDescription::volume_argument`): below Muted, 0 to
   100 percent in fives, read from and kept in the game's own settings.ini (`[audio] volume`), so a level changed in
   the game shows there too; the game is started with `--volume N`. Not while it runs. nullptr: no slider.
