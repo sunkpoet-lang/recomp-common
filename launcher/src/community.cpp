@@ -88,6 +88,8 @@ bool CommunitySocket::Session(void* handle, const std::string& url, const std::s
     curl_easy_setopt(curl, CURLOPT_CONNECT_ONLY, 2L);  // (the WebSocket handshake, then curl_ws_send/recv)
     curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 10L);
     curl_easy_setopt(curl, CURLOPT_USERAGENT, "ForkAde-launcher");
+    // (the certificates from Windows' own store: the libcurl beside the launcher has no bundle of its own on a player's PC)
+    curl_easy_setopt(curl, CURLOPT_SSL_OPTIONS, static_cast<long>(CURLSSLOPT_NATIVE_CA));
     const CURLcode connected = curl_easy_perform(curl);
     curl_slist_free_all(headers);
     if (connected != CURLE_OK) {

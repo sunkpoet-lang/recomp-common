@@ -22,6 +22,7 @@ namespace {
         curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
         curl_easy_setopt(curl, CURLOPT_TIMEOUT, 10L);
         curl_easy_setopt(curl, CURLOPT_USERAGENT, "ForkAde-launcher");
+        curl_easy_setopt(curl, CURLOPT_SSL_OPTIONS, static_cast<long>(CURLSSLOPT_NATIVE_CA)); // (Windows' certificates)
         if (method == "POST") {
             curl_easy_setopt(curl, CURLOPT_POSTFIELDS, "");
         }

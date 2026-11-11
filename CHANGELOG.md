@@ -5,6 +5,9 @@ a minor version. A port's copy only changes when it runs `tools/sync-common.sh`.
 
 ## Unreleased
 
+- **The community connects on any PC** (ForkAde's fork): its libcurl requests take the certificates from Windows' own
+  store (`CURLSSLOPT_NATIVE_CA`). The libcurl shipped beside the launcher has no certificate bundle of its own, and
+  looked for MSYS2's, which only the build machine has.
 - **The Replays page** (ForkAde's fork, native-replays): a collection whose games have `CollectionGame::replays` gets a
   Replays page after Online. It lists the replay folder's `.fareplay` files, newest first, from their headers only:
   the players, the game, the date, online or local, and the result. Each has Watch (the game started with `--replay`),
