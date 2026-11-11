@@ -428,6 +428,23 @@ inline constexpr Entry kSpanish[] = {
     {"Left", "Izquierda"},
     {"Right", "Derecha"},
     {"it", "eso"},
+    {"Replays", "Repeticiones"}, // (native-replays)
+    {"Replays folder", "Carpeta de repeticiones"}, // (native-replays)
+    {"Open folder", "Abrir carpeta"}, // (native-replays)
+    {"Every match of the games that save replays is kept here, online and local, on this computer only. Play one to watch it again: P stops it, - and = change its speed, Esc leaves.", "Cada partida de los juegos que guardan repeticiones queda aquí, en línea y local, solo en esta computadora. Reproduce una para verla otra vez: P la detiene, - e = cambian su velocidad, Esc sale."}, // (native-replays)
+    {"Replays are for the CPS games for now: {} save none.", "Por ahora las repeticiones son de los juegos CPS: {} no guardan ninguna."}, // (native-replays)
+    {"SAVED MATCHES", "PARTIDAS GUARDADAS"}, // (native-replays)
+    {"No replays yet: play a match of a CPS game and it is saved here.", "Aún no hay repeticiones: juega una partida de un juego CPS y se guardará aquí."}, // (native-replays)
+    {"Local", "Local"}, // (native-replays)
+    {"Not a ForkAde replay, or cut short.", "No es una repetición de ForkAde, o está incompleta."}, // (native-replays)
+    {"Recorded with a newer ForkAde: update to play it.", "Grabada con un ForkAde más nuevo: actualiza para reproducirla."}, // (native-replays)
+    {"Damaged: its header is too long.", "Dañada: su encabezado es demasiado largo."}, // (native-replays)
+    {"Cut short.", "Incompleta."}, // (native-replays)
+    {"Damaged.", "Dañada."}, // (native-replays)
+    {"Couldn't be saved completely: kept here to try again.", "No se pudo guardar completa: se dejó aquí para intentarlo otra vez."}, // (native-replays)
+    {"This game doesn't play replays yet.", "Este juego aún no reproduce repeticiones."}, // (native-replays)
+    {"Add your {} {} to play it.", "Agrega el {2} de {1} para reproducirla."}, // (native-replays)
+    {"Not in your version of {}.", "No está en tu versión de {}."}, // (native-replays)
 };
 
 } // namespace recomp::i18n

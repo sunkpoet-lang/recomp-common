@@ -39,7 +39,7 @@
 // The launcher's own pages. A port's: Game, Features, Controllers. A collection's: Games (Library), Features and
 // Controllers (for all the games), Multi game (if it has modes that play several games: launcher.h, MultiMode), then
 // one page for each game whose file is chosen (Title).
-enum class Page { Game, Features, Controllers, Library, Title, Multi, Online, Series, Community, Count };
+enum class Page { Game, Features, Controllers, Library, Title, Multi, Online, Series, Community, Replays, Count };
 
 // A run that stopped with an error: its log, kept (logs/stopped-<when>.log), and what the runtime said stopped it
 struct StoppedLog {
@@ -92,6 +92,7 @@ private:
         std::string id;                  // a collection's game's (a port's: "")
         std::string name;                // its name; its player folder is named by it
         std::string series;              // a collection's game's series (launcher::CollectionGame::series), or ""
+        bool replays = false;            // (ForkAde's fork, native-replays) launcher::CollectionGame::replays
         std::string exe;                 // its program, beside the launcher
         std::string file_section;        // launcher.ini: where its file is ("game", or "game.<id>")
         std::string video_section;       // its Display switches ("video", or "video.<id>")
@@ -339,6 +340,26 @@ private:
     // what a game played through the tunnel is given for it (--nick, --chat-log)
     void chat_card(float width);
     std::vector<std::string> chat_arguments() const;
+    // (ForkAde's fork, native-replays) The Replays page: the replay folder's .fareplay files, their headers only,
+    // newest first, each to play with its game; the folder opened or chosen ([replays] folder; the player folder's
+    // replays/ by default), and given to the games that save replays (--replay-folder)
+    struct ReplayRow {
+        std::filesystem::path path;
+        std::string game, title, mode, started;
+        std::vector<std::string> players;
+        bool result = false;
+        int wins[2] = {0, 0};
+        std::string problem;  // (why it can't be played as it is, or "")
+        bool unsaved = false; // (a .part left by a save that failed)
+    };
+    std::vector<ReplayRow> replays_;
+    Uint64 replays_at_ = 0;
+    static bool read_replay(const std::filesystem::path& path, ReplayRow& row);
+    bool has_replays() const;
+    std::filesystem::path replay_folder() const;
+    void load_replays();
+    void replays_page(float width);
+    std::string picked_replays_;  // (under mutex_) the folder chosen for them
     std::filesystem::path chat_folder() const;
     void open_room(size_t which, bool host);
     void close_room(const std::string& message);  // (the game and the tunnel stopped; `message` shown on the card)

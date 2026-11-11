@@ -424,6 +424,23 @@ inline constexpr Entry kPortuguese[] = {
     {"Left", "Esquerda"},
     {"Right", "Direita"},
     {"it", "ele"},
+    {"Replays", "Replays"}, // (native-replays)
+    {"Replays folder", "Pasta dos replays"}, // (native-replays)
+    {"Open folder", "Abrir pasta"}, // (native-replays)
+    {"Every match of the games that save replays is kept here, online and local, on this computer only. Play one to watch it again: P stops it, - and = change its speed, Esc leaves.", "Cada partida dos jogos que salvam replays fica aqui, online e local, só neste computador. Reproduza um para assistir de novo: P pausa, - e = mudam a velocidade, Esc sai."}, // (native-replays)
+    {"Replays are for the CPS games for now: {} save none.", "Por enquanto os replays são dos jogos CPS: {} não salvam nenhum."}, // (native-replays)
+    {"SAVED MATCHES", "PARTIDAS SALVAS"}, // (native-replays)
+    {"No replays yet: play a match of a CPS game and it is saved here.", "Ainda não há replays: jogue uma partida de um jogo CPS e ela será salva aqui."}, // (native-replays)
+    {"Local", "Local"}, // (native-replays)
+    {"Not a ForkAde replay, or cut short.", "Não é um replay do ForkAde, ou está incompleto."}, // (native-replays)
+    {"Recorded with a newer ForkAde: update to play it.", "Gravado com um ForkAde mais novo: atualize para reproduzir."}, // (native-replays)
+    {"Damaged: its header is too long.", "Danificado: o cabeçalho é longo demais."}, // (native-replays)
+    {"Cut short.", "Incompleto."}, // (native-replays)
+    {"Damaged.", "Danificado."}, // (native-replays)
+    {"Couldn't be saved completely: kept here to try again.", "Não pôde ser salvo por completo: ficou aqui para tentar de novo."}, // (native-replays)
+    {"This game doesn't play replays yet.", "Este jogo ainda não reproduz replays."}, // (native-replays)
+    {"Add your {} {} to play it.", "Adicione {2} de {1} para reproduzir."}, // (native-replays)
+    {"Not in your version of {}.", "Não está na sua versão do {}."}, // (native-replays)
 };
 
 } // namespace recomp::i18n

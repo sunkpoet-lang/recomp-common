@@ -194,6 +194,7 @@ struct Target {
     const launcher::Description* about = nullptr;
     std::string id, name, exe, series, file_section = "game", video_section = "video";
     std::filesystem::path folder;
+    bool replays = false;
 };
 
 std::vector<Target> targets() {
@@ -208,6 +209,7 @@ std::vector<Target> targets() {
             target.name = game.name;
             target.exe = game.exe;
             target.series = game.series ? game.series : "";
+            target.replays = game.replays;
             target.file_section = std::string("game.") + game.id;
             target.video_section = std::string("video.") + game.id;
             const char* own = game.home_env && *game.home_env ? std::getenv(game.home_env) : nullptr;
@@ -674,6 +676,7 @@ App::App(SDL_Window* window)
         slot->name = target.name;
         slot->exe = target.exe;
         slot->series = target.series;
+        slot->replays = target.replays;
         slot->file_section = target.file_section;
         slot->video_section = target.video_section;
         slot->folder = target.folder;
@@ -835,7 +838,7 @@ bool App::shown(size_t which) const {
 }
 
 int App::fixed_pages() const {
-    return collection_ ? 3 + (collection_->multi.empty() ? 0 : 1) + (collection_->lobby ? 1 : 0) + library_index() : 0;
+    return collection_ ? 3 + (collection_->multi.empty() ? 0 : 1) + (collection_->lobby ? 1 : 0) + (has_replays() ? 1 : 0) + library_index() : 0;
 }
 
 std::string App::community_url() const {
@@ -904,6 +907,12 @@ void App::set_page(const std::string& id) {
     }
     if (id == "online" && collection_ && collection_->lobby) {
         page_ = 1;
+    }
+    // (ForkAde's fork, native-replays)
+    for (int i = 0; id == "replays" && i < fixed_pages(); i++) {
+        if (own_page(i) == Page::Replays) {
+            page_ = i;
+        }
     }
     // (a game in a closed series: the series opened)
     for (const std::vector<size_t>& unit : units()) {
@@ -1123,12 +1132,15 @@ Page App::own_page(int index, size_t* which) const {
                 }
                 index--;
             }
+            // (ForkAde's fork, native-replays: Replays after Online, where a game saves them)
             int online = collection_->lobby ? 1 : 0;
-            return index == 0          ? Page::Library
-                   : index < 1 + online ? Page::Online
-                   : index == 1 + online ? Page::Features
-                   : index == 2 + online ? Page::Controllers
-                                         : Page::Multi;
+            int replays = has_replays() ? 1 : 0;
+            return index == 0                    ? Page::Library
+                   : index < 1 + online           ? Page::Online
+                   : index < 1 + online + replays ? Page::Replays
+                   : index == 1 + online + replays ? Page::Features
+                   : index == 2 + online + replays ? Page::Controllers
+                                                   : Page::Multi;
         }
         std::vector<Row> list = rows();
         if (index < fixed || static_cast<size_t>(index - fixed) >= list.size()) {
@@ -1399,6 +1411,16 @@ void App::play(size_t which, const std::vector<std::string>& extra) {
     target.folder = one.folder;
     std::vector<std::string> arguments = arguments_for(prefs_, target);
     arguments.insert(arguments.end(), extra.begin(), extra.end());
+    if (one.replays) {
+        // (ForkAde's fork, native-replays: every match saved there, with the player's name in it)
+        const auto folder = replay_folder().u8string();
+        arguments.insert(arguments.end(), {"--replay-folder", std::string(folder.begin(), folder.end())});
+        const std::vector<std::string> chat = chat_arguments();
+        const auto nick = std::find(chat.begin(), chat.end(), "--nick");
+        if (nick != chat.end() && nick + 1 != chat.end() && std::find(arguments.begin(), arguments.end(), "--nick") == arguments.end()) {
+            arguments.insert(arguments.end(), {"--nick", *(nick + 1)});
+        }
+    }
     one.stopped_log.clear();
     one.stopped_reason.clear();
     // (seen as running from here: a game that stops before the next frame still has its end noticed, and its log kept)
@@ -1606,6 +1628,12 @@ void App::frame() {
         found.swap(found_);
         found_ready = found_ready_;
         found_ready_ = false;
+        if (!picked_replays_.empty()) {
+            prefs_.set("replays", "folder", picked_replays_);
+            prefs_.save();
+            picked_replays_.clear();
+            replays_at_ = 0;
+        }
     }
     if (!picked.empty() && picked_choice >= 0) {
         set_folder_choice(picked_for_, picked_choice, picked);
@@ -1779,7 +1807,7 @@ void App::sidebar(float height) {
     ImGui::SetCursorScreenPos(ImVec2(origin.x + px(24), ImGui::GetCursorScreenPos().y));
     ui::text(TrFormat("Version {}", {LAUNCHER_VERSION}).c_str(), Font::Regular, ui::size::kSmall, p.tertiary);
 #endif
-    const char* own[] = {"Game", about_.features_name, "Controllers", "Games", "", "Multi game", "Online", "", "Community", ""};
+    const char* own[] = {"Game", about_.features_name, "Controllers", "Games", "", "Multi game", "Online", "", "Community", "Replays", ""};
     float fixed = static_cast<float>(fixed_pages());
     float top = std::max(collection_ ? px(108) : px(100), ImGui::GetCursorScreenPos().y - origin.y + px(24));
     float step = px(38);
@@ -2102,6 +2130,9 @@ void App::page(float width, float height) {
         break;
     case Page::Multi:
         multi_page(content);
+        break;
+    case Page::Replays:
+        replays_page(content);
         break;
     case Page::Count:
         break;
@@ -2771,6 +2802,298 @@ void App::chat_card(float width) {
             SDL_OpenURL(file_url(chat_folder()).c_str());
         }
     });
+    card.end();
+}
+
+#ifdef LAUNCHER_COMMUNITY
+#include "flags.h"  // (the replay icon: replay_icon_draw)
+#endif
+
+// ---- (ForkAde's fork, native-replays) Replays ------------------------------------------------------------
+
+namespace {
+
+// The header of a ForkAde replay (port/replay.h): "FAREPLAY", format, backend, then its JSON. Only what the list
+// shows is read.
+struct ReplayJson {
+    const std::string& s;
+    size_t at = 0;
+    bool ok = true;
+    void space() { while (at < s.size() && std::isspace(static_cast<unsigned char>(s[at]))) at++; }
+    bool eat(char c) { space(); if (at < s.size() && s[at] == c) { at++; return true; } return false; }
+    std::string string() {
+        std::string out;
+        if (!eat('"')) { ok = false; return out; }
+        while (at < s.size() && s[at] != '"') {
+            char c = s[at++];
+            if (c == '\\' && at < s.size()) {
+                const char e = s[at++];
+                if (e == 'u' && at + 4 <= s.size()) {
+                    const unsigned v = static_cast<unsigned>(std::strtoul(s.substr(at, 4).c_str(), nullptr, 16));
+                    at += 4;
+                    if (v < 0x80) out += static_cast<char>(v);
+                    else if (v < 0x800) { out += static_cast<char>(0xC0 | (v >> 6)); out += static_cast<char>(0x80 | (v & 0x3F)); }
+                    else { out += static_cast<char>(0xE0 | (v >> 12)); out += static_cast<char>(0x80 | ((v >> 6) & 0x3F)); out += static_cast<char>(0x80 | (v & 0x3F)); }
+                    continue;
+                }
+                c = e == 'n' ? '\n' : e == 't' ? '\t' : e;
+            }
+            out += c;
+        }
+        if (!eat('"')) ok = false;
+        return out;
+    }
+    double number() {
+        space();
+        const size_t from = at;
+        while (at < s.size() && std::strchr("+-.eE0123456789", s[at])) at++;
+        if (from == at) { ok = false; return 0; }
+        return std::strtod(s.substr(from, at - from).c_str(), nullptr);
+    }
+    void skip() {
+        space();
+        if (at >= s.size()) { ok = false; return; }
+        const char c = s[at];
+        if (c == '"') { string(); return; }
+        if (c == '{' || c == '[') {
+            const char end = c == '{' ? '}' : ']';
+            at++;
+            if (eat(end)) return;
+            do {
+                if (c == '{') { string(); if (!eat(':')) { ok = false; return; } }
+                skip();
+            } while (ok && eat(','));
+            if (!eat(end)) ok = false;
+            return;
+        }
+        if (s.compare(at, 4, "true") == 0 || s.compare(at, 4, "null") == 0) { at += 4; return; }
+        if (s.compare(at, 5, "false") == 0) { at += 5; return; }
+        number();
+    }
+};
+
+} // namespace
+
+bool App::read_replay(const std::filesystem::path& path, ReplayRow& row) {
+    std::ifstream in(path, std::ios::binary);
+    unsigned char start[16] = {};
+    if (!in.read(reinterpret_cast<char*>(start), sizeof(start)) || std::memcmp(start, "FAREPLAY", 8) != 0) {
+        row.problem = "Not a ForkAde replay, or cut short.";
+        return false;
+    }
+    const unsigned format = start[8] | start[9] << 8;
+    const uint32_t length = start[12] | start[13] << 8 | start[14] << 16 | static_cast<uint32_t>(start[15]) << 24;
+    if (format > 1) {
+        row.problem = "Recorded with a newer ForkAde: update to play it.";
+        return false;
+    }
+    if (length > 64 * 1024) {
+        row.problem = "Damaged: its header is too long.";
+        return false;
+    }
+    std::string json(length, '\0');
+    if (!in.read(json.data(), length)) {
+        row.problem = "Cut short.";
+        return false;
+    }
+    ReplayJson r{json};
+    if (!r.eat('{')) {
+        row.problem = "Damaged.";
+        return false;
+    }
+    if (!r.eat('}')) {
+        do {
+            const std::string key = r.string();
+            if (!r.ok || !r.eat(':')) break;
+            if (key == "game") row.game = r.string();
+            else if (key == "title") row.title = r.string();
+            else if (key == "mode") row.mode = r.string();
+            else if (key == "started") row.started = r.string();
+            else if (key == "players" && r.eat('[')) {
+                if (!r.eat(']')) {
+                    do { row.players.push_back(r.string()); } while (r.ok && r.eat(','));
+                    r.eat(']');
+                }
+            } else if (key == "result" && r.eat('{')) {
+                if (!r.eat('}')) {
+                    do {
+                        const std::string inner = r.string();
+                        if (!r.eat(':')) { r.ok = false; break; }
+                        if (inner == "wins" && r.eat('[')) {
+                            row.wins[0] = static_cast<int>(r.number());
+                            if (r.eat(',')) row.wins[1] = static_cast<int>(r.number());
+                            r.eat(']');
+                            row.result = true;
+                        } else {
+                            r.skip();
+                        }
+                    } while (r.ok && r.eat(','));
+                    r.eat('}');
+                }
+            } else {
+                r.skip();
+            }
+        } while (r.ok && r.eat(','));
+    }
+    if (!r.ok || row.game.empty()) {
+        row.problem = "Damaged.";
+        return false;
+    }
+    return true;
+}
+
+bool App::has_replays() const {
+    for (const auto& one : slots_) {
+        if (one->replays) {
+            return true;
+        }
+    }
+    return false;
+}
+
+std::filesystem::path App::replay_folder() const {
+    const std::string chosen = prefs_.get("replays", "folder");
+    if (!chosen.empty()) {
+        return std::filesystem::u8path(chosen);
+    }
+    return folder_ / "replays";
+}
+
+void App::load_replays() {
+    // (again every few seconds while the page is open: a game that ended has saved its match)
+    const Uint64 now = SDL_GetTicks();
+    if (replays_at_ && now - replays_at_ < 3000) {
+        return;
+    }
+    replays_at_ = now;
+    replays_.clear();
+    std::error_code error;
+    std::vector<std::pair<std::filesystem::file_time_type, std::filesystem::path>> files;
+    for (std::filesystem::directory_iterator it(replay_folder(), error), end; !error && it != end; it.increment(error)) {
+        const std::filesystem::path& path = it->path();
+        const std::string name = path.filename().string();
+        const std::string tail = ".fareplay.part";
+        const bool part = name.size() > tail.size() && name.compare(name.size() - tail.size(), tail.size(), tail) == 0;
+        if (it->is_regular_file(error) && (path.extension() == ".fareplay" || part)) {
+            files.emplace_back(it->last_write_time(error), path);
+        }
+    }
+    std::sort(files.begin(), files.end(), [](const auto& a, const auto& b) { return a.first > b.first; });
+    if (files.size() > 300) {
+        files.resize(300); // (the newest: a list to read, not every match ever)
+    }
+    for (const auto& [when, path] : files) {
+        ReplayRow row;
+        row.path = path;
+        row.unsaved = path.extension() == ".part";
+        read_replay(path, row);
+        if (row.unsaved) {
+            row.problem = "Couldn't be saved completely: kept here to try again.";
+        }
+        replays_.push_back(std::move(row));
+    }
+}
+
+void App::replays_page(float width) {
+    const ui::Palette& p = ui::palette();
+    load_replays();
+    layout::heading("Replays", "Every match of the games that save replays is kept here, online and local, on this computer only. "
+                    "Play one to watch it again: P stops it, - and = change its speed, Esc leaves.", width);
+    Card folder(width);
+    const auto folder_text = replay_folder().u8string();
+    const std::string where(folder_text.begin(), folder_text.end());
+    row(width, "Replays folder", where.c_str(), 312.0f, 36.0f, [&] {
+        if (ui::button("Open folder", Kind::Secondary, 150.0f)) {
+            std::error_code error;
+            std::filesystem::create_directories(replay_folder(), error);
+            SDL_OpenURL(file_url(replay_folder()).c_str());
+        }
+        ImGui::SameLine(0, px(12));
+        if (ui::button("Choose folder…", Kind::Secondary, 150.0f)) {
+            const std::string start = where;
+            SDL_ShowOpenFolderDialog(
+                [](void* self, const char* const* files, int) {
+                    App* app = static_cast<App*>(self);
+                    if (files && files[0]) {
+                        std::lock_guard<std::mutex> lock(app->mutex_);
+                        app->picked_replays_ = files[0];
+                    }
+                    wake();
+                },
+                this, window_, start.empty() ? nullptr : start.c_str(), false);
+        }
+    });
+    folder.end();
+    // (which games save them: the others, for now, none)
+    std::string none;
+    for (const auto& one : slots_) {
+        if (!one->replays) {
+            none += (none.empty() ? "" : ", ") + one->name;
+        }
+    }
+    if (!none.empty()) {
+        ui::gap(10);
+        ui::text(TrFormat("Replays are for the CPS games for now: {} save none.", {none}).c_str(), Font::Regular, ui::size::kDetail,
+                 p.tertiary, width);
+    }
+    ui::gap(24);
+    layout::label("SAVED MATCHES");
+    Card card(width);
+    if (replays_.empty()) {
+        empty_row(width, Tr("No replays yet: play a match of a CPS game and it is saved here."), false);
+    }
+    int n = 0;
+    for (const ReplayRow& replay : replays_) {
+        if (n) {
+            inset_separator(width);
+        }
+        size_t which = slots_.size();
+        for (size_t i = 0; i < slots_.size(); i++) {
+            if (slots_[i]->id == replay.game) {
+                which = i;
+            }
+        }
+        const std::string first = replay.players.size() > 0 && !replay.players[0].empty() ? replay.players[0] : Tr("Player 1");
+        const std::string second = replay.players.size() > 1 && !replay.players[1].empty() ? replay.players[1] : Tr("Player 2");
+        const auto file = replay.path.filename().u8string();
+        const std::string title = replay.game.empty() ? std::string(file.begin(), file.end()) : TrFormat("{} vs {}", {first, second});
+        const std::string game = which < slots_.size() ? slots_[which]->name : (replay.title.empty() ? replay.game : replay.title);
+        // 2026-11-11T20:41:00-06:00: the date and the time
+        const std::string when = replay.started.size() >= 16 ? replay.started.substr(0, 10) + " " + replay.started.substr(11, 5) : replay.started;
+        std::string detail;
+        if (!replay.game.empty()) {
+            detail = game + " - " + when + " - " + Tr(replay.mode == "online" ? "Online" : "Local");
+        }
+        if (replay.result) {
+            detail += " - " + std::to_string(replay.wins[0]) + "-" + std::to_string(replay.wins[1]);
+        }
+        // (why Play can't be pressed, if it can't)
+        std::string why = replay.problem.empty() ? std::string() : Tr(replay.problem);
+        if (why.empty() && which >= slots_.size()) {
+            why = TrFormat("Not in your version of {}.", {LAUNCHER_GAME_NAME});
+        } else if (why.empty() && !slots_[which]->replays) {
+            why = Tr("This game doesn't play replays yet.");
+        } else if (why.empty() && !can_play(which)) {
+            why = TrFormat("Add your {} {} to play it.", {slots_[which]->name, Tr(collection_->file_name)});
+        }
+        if (!why.empty()) {
+            detail += (detail.empty() ? "" : ". ") + why;
+        }
+        ImGui::PushID(n++);
+        row(width, title.c_str(), detail.c_str(), 130.0f + 44.0f, 36.0f, [&] {
+#ifdef LAUNCHER_COMMUNITY
+            const ImVec2 at = ImGui::GetCursorScreenPos();
+            launcher::replay_icon_draw(at.x, at.y + px(2), px(32), !why.empty());
+#endif
+            ImGui::Dummy(ImVec2(px(32), px(36)));
+            ImGui::SameLine(0, px(12));
+            if (ui::button("Watch", Kind::Primary, 130.0f, why.empty() && !any_running())) {
+                const auto path = replay.path.u8string();
+                play(which, {"--replay", std::string(path.begin(), path.end())});
+            }
+        }, !why.empty());
+        ImGui::PopID();
+    }
     card.end();
 }
 

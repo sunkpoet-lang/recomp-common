@@ -12,6 +12,7 @@ namespace launcher {
 namespace {
 
 #include "flags_atlas.inc"
+#include "replay_icon.inc"
 
 std::vector<unsigned char> from_base64(const char* text) {
     std::vector<unsigned char> bytes;
@@ -72,6 +73,42 @@ SDL_Texture* texture() {
     return texture_;
 }
 
+// (native-replays) The replay icon's texture, made the first time it is drawn
+SDL_Texture* replay_texture_ = nullptr;
+bool replay_tried_ = false;
+
+SDL_Texture* replay_texture() {
+    if (replay_texture_ || replay_tried_ || !renderer_) {
+        return replay_texture_;
+    }
+    replay_tried_ = true;
+    const std::vector<unsigned char> palette = from_base64(kReplayIconPalette), runs = from_base64(kReplayIconRuns);
+    const size_t pixels = static_cast<size_t>(kReplayIconSize) * kReplayIconSize;
+    std::vector<unsigned char> rgba(pixels * 4);
+    size_t at = 0;
+    for (size_t r = 0; r + 1 < runs.size() && at < pixels; r += 2) {
+        const size_t colour = static_cast<size_t>(runs[r + 1]) * 4;
+        if (colour + 4 > palette.size()) {
+            return nullptr;
+        }
+        for (int n = 0; n < runs[r] && at < pixels; n++, at++) {
+            std::memcpy(&rgba[at * 4], palette.data() + colour, 4);
+        }
+    }
+    if (at != pixels) {
+        return nullptr;
+    }
+    SDL_Surface* surface = SDL_CreateSurfaceFrom(kReplayIconSize, kReplayIconSize, SDL_PIXELFORMAT_RGBA32, rgba.data(), kReplayIconSize * 4);
+    if (surface) {
+        replay_texture_ = SDL_CreateTextureFromSurface(renderer_, surface);
+        SDL_DestroySurface(surface);
+        if (replay_texture_) {
+            SDL_SetTextureScaleMode(replay_texture_, SDL_SCALEMODE_LINEAR);
+        }
+    }
+    return replay_texture_;
+}
+
 // Where a code's flag is in the atlas; false for one it hasn't
 bool place(const std::string& code, ImVec2& uv0, ImVec2& uv1) {
     if (code.size() != 2) {
@@ -116,7 +153,21 @@ bool flag_draw(const std::string& code, float x, float y, float height) {
     return true;
 }
 
+bool replay_icon_draw(float x, float y, float size, bool dim) {
+    SDL_Texture* t = replay_texture();
+    if (!t) {
+        return false;
+    }
+    ImGui::GetWindowDrawList()->AddImage(ImTextureRef(static_cast<ImTextureID>(reinterpret_cast<intptr_t>(t))), ImVec2(x, y),
+                                         ImVec2(x + size, y + size), ImVec2(0, 0), ImVec2(1, 1), IM_COL32(255, 255, 255, dim ? 80 : 255));
+    return true;
+}
+
 void flags_release() {
+    if (replay_texture_) {
+        SDL_DestroyTexture(replay_texture_);
+        replay_texture_ = nullptr;
+    }
     if (texture_) {
         SDL_DestroyTexture(texture_);
         texture_ = nullptr;

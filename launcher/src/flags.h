@@ -16,7 +16,10 @@ void flags_use_renderer(SDL_Renderer* renderer);
 bool flag_image(const std::string& code, float height);
 // A flag drawn at a place on the window's draw list (no item); false for a code it hasn't
 bool flag_draw(const std::string& code, float x, float y, float height);
-// The texture freed (main.cpp, before the renderer goes)
+// (native-replays) The ForkAde replay icon (replay_icon.inc), `size` points square at a place on the window's draw
+// list; `dim`: faded, for a replay that can't be played. False if it couldn't be made.
+bool replay_icon_draw(float x, float y, float size, bool dim);
+// The textures freed (main.cpp, before the renderer goes)
 void flags_release();
 
 }  // namespace launcher

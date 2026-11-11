@@ -5,6 +5,13 @@ a minor version. A port's copy only changes when it runs `tools/sync-common.sh`.
 
 ## Unreleased
 
+- **The Replays page** (ForkAde's fork, native-replays): a collection whose games have `CollectionGame::replays` gets a
+  Replays page after Online. It lists the replay folder's `.fareplay` files, newest first, from their headers only:
+  the players, the game, the date, online or local, and the result. Each has Watch (the game started with `--replay`),
+  or the reason it can't be watched (a newer format, damaged, a game not in the collection, its file missing, a save
+  left unfinished). Open folder and Choose folder… keep `[replays] folder` (the player folder's `replays/` by default),
+  and those games are started with `--replay-folder` and the player's name. The ForkAde replay icon (`replay_icon.inc`,
+  `launcher::replay_icon_draw`) is beside each row. `--page replays` opens it. Spanish and Portuguese.
 - **Allow spectators says the in-game chat stays between the players** (ForkAde's fork, match-spectators section 7):
   spectators watch, and neither write in nor see the game's chat.
 - **Watch matches being played** (ForkAde's fork, match-spectators): `launcher::PlayingMatch` and `Room::playing` read
