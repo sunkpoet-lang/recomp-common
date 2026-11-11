@@ -835,7 +835,18 @@ bool App::shown(size_t which) const {
 }
 
 int App::fixed_pages() const {
-    return collection_ ? 3 + (collection_->multi.empty() ? 0 : 1) + (collection_->lobby ? 1 : 0) : 0;
+    return collection_ ? 3 + (collection_->multi.empty() ? 0 : 1) + (collection_->lobby ? 1 : 0) + library_index() : 0;
+}
+
+std::string App::community_url() const {
+#ifdef LAUNCHER_COMMUNITY
+    if (const char* local = SDL_getenv("FORKADE_COMMUNITY_URL"); local && *local) {
+        return local;
+    }
+    return collection_ && collection_->community ? collection_->community : "";
+#else
+    return "";
+#endif
 }
 
 int App::page_count() const {
@@ -1104,7 +1115,14 @@ Page App::own_page(int index, size_t* which) const {
     if (collection_) {
         int fixed = fixed_pages();
         if (index < fixed) {
-            // (Games, then Online where there is one: the pages played from; then the settings, then Multi game)
+            // (Community first where there is one (ForkAde's fork); then Games, then Online where there is one: the
+            // pages played from; then the settings, then Multi game)
+            if (library_index() == 1) {
+                if (index == 0) {
+                    return Page::Community;
+                }
+                index--;
+            }
             int online = collection_->lobby ? 1 : 0;
             return index == 0          ? Page::Library
                    : index < 1 + online ? Page::Online
@@ -1545,7 +1563,7 @@ bool App::consume(const SDL_Event& event) {
         if (collection_) {
             // (whichever game it is, or a folder with several)
             find_in(event.drop.data);
-            page_ = 0;
+            page_ = library_index();
             return true;
         }
         // To the port's page that is shown if it takes files, else to the first of its pages that does,
@@ -1761,7 +1779,7 @@ void App::sidebar(float height) {
     ImGui::SetCursorScreenPos(ImVec2(origin.x + px(24), ImGui::GetCursorScreenPos().y));
     ui::text(TrFormat("Version {}", {LAUNCHER_VERSION}).c_str(), Font::Regular, ui::size::kSmall, p.tertiary);
 #endif
-    const char* own[] = {"Game", about_.features_name, "Controllers", "Games", "", "Multi game", "Online", "", ""};
+    const char* own[] = {"Game", about_.features_name, "Controllers", "Games", "", "Multi game", "Online", "", "Community", ""};
     float fixed = static_cast<float>(fixed_pages());
     float top = std::max(collection_ ? px(108) : px(100), ImGui::GetCursorScreenPos().y - origin.y + px(24));
     float step = px(38);
@@ -2011,6 +2029,9 @@ void App::page(float width, float height) {
         launcher::PageContext shown = context(content);
         about_.pages[static_cast<size_t>(port_page(page_))].draw(shown);
     }
+#ifdef LAUNCHER_COMMUNITY
+    follow_community();
+#endif
     if (room_url()) {
         const bool online_page = collection_ || about_.online_page;
         follow_room(kind == (online_page ? Page::Online : Page::Game) && !any_running());
@@ -2040,6 +2061,11 @@ void App::page(float width, float height) {
         } else {
             single_online_page(content);
         }
+        break;
+    case Page::Community:
+#ifdef LAUNCHER_COMMUNITY
+        community_page(content);
+#endif
         break;
     case Page::Multi:
         multi_page(content);
@@ -2976,7 +3002,7 @@ void App::online_page(float width) {
         row(width, title.c_str(), "Both players of a match need the same version. Update to play the players who have the new one.", 130.0f,
             36.0f, [&] {
                 if (ui::button("Update…", Kind::Primary, 130.0f)) {
-                    page_ = 0;  // (the Games page: the update card)
+                    page_ = library_index();  // (the Games page: the update card)
                 }
             });
         news.end();
@@ -3082,7 +3108,7 @@ void App::online_page(float width) {
             [&] {
 #ifdef LAUNCHER_UPDATE_REPO
                 if (ui::button("Update…", Kind::Secondary, 130.0f)) {
-                    page_ = 0;  // (the Games page: the update card)
+                    page_ = library_index();  // (the Games page: the update card)
                 }
 #endif
             },
@@ -5107,3 +5133,267 @@ void App::controllers_page(float width) {
         layout.end();
     }
 }
+
+#ifdef LAUNCHER_COMMUNITY
+// ---- (ForkAde's fork, discord-community-lobby) The Community page: signing in with Discord, then the public lobby
+
+namespace {
+    // (a country code as the page shows it: the font has no flag pictures)
+    std::string FlagLabel(const std::string& flag) {
+        return flag.size() == 2 ? "[" + flag + "]" : std::string();
+    }
+    std::string ClockOf(int64_t at) {
+        const std::time_t seconds = static_cast<std::time_t>(at / 1000);
+        std::tm local{};
+#ifdef _WIN32
+        localtime_s(&local, &seconds);
+#else
+        localtime_r(&seconds, &local);
+#endif
+        char text[8];
+        std::strftime(text, sizeof(text), "%H:%M", &local);
+        return text;
+    }
+    std::string WebSocketUrl(const std::string& base) {
+        return (base.rfind("https", 0) == 0 ? "wss" + base.substr(5) : base.rfind("http", 0) == 0 ? "ws" + base.substr(4) : base) + "/v1/community/socket";
+    }
+}  // namespace
+
+void App::community_signed_out(const char* why) {
+    community_.Stop();
+    prefs_.set("community", "session", "");
+    prefs_.save();
+    community_people_.clear();
+    community_messages_.clear();
+    community_said_ = why;
+}
+
+void App::follow_community() {
+    const std::string base = community_url();
+    if (base.empty()) {
+        return;
+    }
+    const Uint64 now = SDL_GetTicks();
+    // The sign-in: the request made, the browser opened at Discord, then asked about every 2 seconds
+    if (community_request_.valid() && community_request_.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+        const launcher::SignInRequest made = community_request_.get();
+        if (made.ok) {
+            community_signin_ = made;
+            community_signin_at_ = now;
+            community_poll_at_ = now;
+            community_said_ = "Accept in your browser, then come back here.";
+            SDL_OpenURL(launcher::signin_page(base, made.id).c_str());
+        } else {
+            community_said_ = made.busy ? "The online service is busy: try again in a few seconds." : "Couldn't reach the online service.";
+        }
+    }
+    if (community_poll_.valid() && community_poll_.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+        const launcher::SignInState said = community_poll_.get();
+        community_poll_at_ = now + static_cast<Uint64>(said.busy) * 1000;
+        if (said.state == "done") {
+            prefs_.set("community", "session", said.session);
+            prefs_.set("community", "nickname", said.nickname);
+            prefs_.set("community", "flag", said.flag);
+            prefs_.save();
+            community_signin_ = {};
+            community_said_.clear();
+        } else if (said.state == "waiting") {
+            community_signin_ = {};
+            community_said_ = "Your request to join is waiting for an administrator's approval.";
+        } else if (said.state == "not-member") {
+            community_signin_ = {};
+            community_said_ = "That Discord account hasn't asked to join yet: ask on ForkAde's join page first.";
+        } else if (said.state == "expired") {
+            community_signin_ = {};
+            community_said_ = "The sign-in expired. Try again.";
+        }
+    }
+    if (!community_signin_.id.empty() && !community_poll_.valid() && now >= community_poll_at_ + 2000) {
+        if (now - community_signin_at_ > 10 * 60 * 1000) {
+            community_signin_ = {};
+            community_said_ = "The sign-in expired. Try again.";
+        } else {
+            community_poll_at_ = now;
+            community_poll_ = std::async(std::launch::async, [base, request = community_signin_] { return launcher::signin_poll(base, request); });
+        }
+    }
+    // The lobby's socket: open while signed in; what it said
+    const std::string session = prefs_.get("community", "session");
+    if (session.empty()) {
+        return;
+    }
+    if (community_.state() == launcher::CommunitySocket::State::Off) {
+        community_.Start(WebSocketUrl(base), session);
+    }
+    if (community_.state() == launcher::CommunitySocket::State::Stopped) {
+        const int why = community_.reason();
+        if (why == 4003) {
+            return community_signed_out("Your membership was revoked.");
+        }
+        if (why == 401 || why == 403 || why == 4001) {
+            return community_signed_out("Sign in again.");
+        }
+        // (4004: a moderator removed this player from the lobby; "Enter the lobby again" starts it once more)
+    }
+    for (const std::string& text : community_.Take()) {
+        const launcher::CommunityEvent e = launcher::parse_community_event(text);
+        if (e.type == "hello") {
+            community_you_ = e.you;
+            community_people_ = e.presence;
+            community_messages_.assign(e.history.begin(), e.history.end());
+            community_scroll_ = true;
+            community_said_.clear();
+            if (community_playing_) {
+                community_.Send(launcher::community_state("playing"));
+            }
+        } else if (e.type == "presence") {
+            community_people_ = e.presence;
+        } else if (e.type == "message" && !e.history.empty()) {
+            community_messages_.push_back(e.history.front());
+            while (community_messages_.size() > 500) {
+                community_messages_.pop_front();
+            }
+            community_scroll_ = true;
+        } else if (e.type == "deleted") {
+            community_messages_.erase(std::remove_if(community_messages_.begin(), community_messages_.end(),
+                                                     [&](const launcher::CommunityMessage& m) { return m.mid == e.mid; }),
+                                      community_messages_.end());
+        } else if (e.type == "muted") {
+            community_muted_until_ = now + static_cast<Uint64>(e.minutes) * 60 * 1000;
+            community_said_ = TrFormat("A moderator muted you for {} minutes.", {std::to_string(e.minutes)});
+        } else if (e.type == "refused") {
+            community_said_ = e.wait ? TrFormat("{} Wait {} seconds.", {Tr(e.error.c_str()), std::to_string(e.wait)}) : Tr(e.error.c_str());
+        }
+    }
+    // (playing or not: said to the lobby when it changes)
+    const bool playing = any_running();
+    if (playing != community_playing_) {
+        community_playing_ = playing;
+        community_.Send(launcher::community_state(playing ? "playing" : "lobby"));
+    }
+}
+
+void App::community_page(float width) {
+    const ui::Palette& p = ui::palette();
+    layout::heading("Community", "ForkAde's players: talk, meet, and find someone to play.", width);
+    const std::string session = prefs_.get("community", "session");
+    if (session.empty()) {
+        Card card(width);
+        const bool asking = community_request_.valid() || !community_signin_.id.empty();
+        const char* detail = !community_said_.empty() ? community_said_.c_str()
+                                                      : "For approved members of the beta. Ask to join on ForkAde's join page first.";
+        row(width, "Sign in with Discord", Tr(detail), 220.0f, 36.0f, [&] {
+            if (ui::button(asking ? "Waiting for the browser…" : "Sign in with Discord", Kind::Primary, 220.0f, !asking)) {
+                community_said_.clear();
+                const std::string base = community_url();
+                community_request_ = std::async(std::launch::async, [base] { return launcher::signin_request(base); });
+            }
+        });
+        card.end();
+        return;
+    }
+    // Who this player is, and the lobby's state
+    const launcher::CommunitySocket::State state = community_.state();
+    const char* status = state == launcher::CommunitySocket::State::Open      ? "In the lobby"
+                         : state == launcher::CommunitySocket::State::Waiting ? "Reconnecting…"
+                         : state == launcher::CommunitySocket::State::Stopped ? "Out of the lobby"
+                                                                              : "Connecting…";
+    {
+        Card me(width);
+        const std::string who = FlagLabel(prefs_.get("community", "flag")) + " " + prefs_.get("community", "nickname");
+        const std::string detail = community_said_.empty() ? std::string(Tr(status)) : Tr(status) + std::string(" · ") + Tr(community_said_.c_str());
+        row(width, who.c_str(), detail.c_str(), 200.0f, 36.0f, [&] {
+            if (state == launcher::CommunitySocket::State::Stopped && community_.reason() == 4004) {
+                if (ui::button("Enter the lobby again", Kind::Secondary, 200.0f)) {
+                    community_said_.clear();
+                    community_.Start(WebSocketUrl(community_url()), session);
+                }
+            } else if (ui::button("Sign out", Kind::Secondary, 120.0f)) {
+                community_signed_out("");
+            }
+        });
+        me.end();
+    }
+    const bool moderator = community_you_.role == "moderator" || community_you_.role == "admin";
+    // Who is there
+    ui::gap(24);
+    // (no "updates every 10 seconds" here: the lobby's events come as they happen)
+    ui::text(TrFormat("HERE NOW: {}", {std::to_string(community_people_.size())}).c_str(), Font::Semibold, ui::size::kDetail, p.secondary);
+    ui::gap(10);
+    {
+        Card people(width);
+        if (community_people_.empty()) {
+            empty_row(width, Tr("Nobody else is here right now."), false);
+        }
+        for (size_t i = 0; i < community_people_.size(); i++) {
+            const launcher::CommunityPerson& one = community_people_[i];
+            if (i) {
+                inset_separator(width);
+            }
+            const std::string name = FlagLabel(one.flag) + " " + one.nickname +
+                                     (one.role == "admin" ? std::string("  · ") + Tr("Administrator") : one.role == "moderator" ? std::string("  · ") + Tr("Moderator") : std::string());
+            const char* doing = one.state == "playing" ? "Playing" : one.state == "watching" ? "Watching" : "In the lobby";
+            ImGui::PushID(static_cast<int>(i));
+            const bool canModerate = moderator && one.nickname != community_you_.nickname;
+            row(width, name.c_str(), Tr(doing), canModerate ? 230.0f : 0.0f, 32.0f, [&] {
+                if (!canModerate) {
+                    return;
+                }
+                if (ui::button("Mute 10 min", Kind::Secondary, 110.0f)) {
+                    community_.Send("{\"type\":\"mute\",\"nickname\":\"" + one.nickname + "\",\"minutes\":10}");
+                }
+                ImGui::SameLine();
+                if (ui::button("Kick", Kind::Secondary, 110.0f)) {
+                    community_.Send("{\"type\":\"kick\",\"nickname\":\"" + one.nickname + "\"}");
+                }
+            });
+            ImGui::PopID();
+        }
+        people.end();
+    }
+    // The general chat: the history, newest at the bottom, and the line being typed
+    ui::gap(24);
+    ui::text(Tr("GENERAL CHAT"), Font::Semibold, ui::size::kDetail, p.secondary);
+    ui::gap(10);
+    // (`width` is in pixels already; the widgets' own widths are in points, as ui::px takes them)
+    ImGui::BeginChild("##community-chat", ImVec2(width, px(320)), ImGuiChildFlags_Borders);
+    const float wrap = width - px(40);
+    for (size_t i = 0; i < community_messages_.size(); i++) {
+        const launcher::CommunityMessage& m = community_messages_[i];
+        ImGui::PushID(static_cast<int>(m.mid));
+        const std::string head = FlagLabel(m.flag) + " " + m.nickname + "   " + ClockOf(m.at);
+        ui::text(head.c_str(), Font::Semibold, ui::size::kDetail, m.role == "admin" || m.role == "moderator" ? p.accent : p.secondary);
+        if (moderator) {
+            ImGui::SameLine();
+            if (ImGui::SmallButton(Tr("Delete"))) {
+                community_.Send("{\"type\":\"delete\",\"mid\":" + std::to_string(m.mid) + "}");
+            }
+        }
+        // (plain text: no link in it can be opened from here)
+        ui::text(m.text.c_str(), Font::Regular, ui::size::kBody, p.text, wrap);
+        ui::gap(8);
+        ImGui::PopID();
+    }
+    if (community_messages_.empty()) {
+        ui::text(Tr("No messages in the last 24 hours. Say hello."), Font::Regular, ui::size::kBody, p.tertiary);
+    }
+    if (community_scroll_) {
+        ImGui::SetScrollHereY(1.0f);
+        community_scroll_ = false;
+    }
+    ImGui::EndChild();
+    ui::gap(10);
+    const bool muted = SDL_GetTicks() < community_muted_until_;
+    const bool open = state == launcher::CommunitySocket::State::Open;
+    ui::text_box("##community-line", community_line_, sizeof(community_line_), Tr(muted ? "You are muted" : "Write a message (500 characters at most)"), width / ui::scale() - 130.0f);
+    const bool typing = ImGui::IsItemActive();
+    ImGui::SameLine();
+    const bool send = ui::button("Send", Kind::Primary, 110.0f, open && !muted && community_line_[0]) ||
+                      (community_line_active_ && ImGui::IsKeyPressed(ImGuiKey_Enter) && open && !muted && community_line_[0]);
+    community_line_active_ = typing;
+    if (send) {
+        community_.Send(launcher::community_say(community_line_));
+        community_line_[0] = 0;
+    }
+}
+#endif

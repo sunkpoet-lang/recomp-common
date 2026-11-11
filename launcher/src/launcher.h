@@ -322,6 +322,10 @@ struct Collection {
     const char *room = nullptr;
     int room_protocol = 0;
     const char *file_name = "game file"; // what a game's file is called, as the Online page says it ("ROM set")
+    // (ForkAde's fork, discord-community-lobby) The community: the service's address ("https://..."), whose public lobby
+    // and general chat is the first page once signed in with Discord (community.h). nullptr: no such page. The
+    // FORKADE_COMMUNITY_URL environment variable stands in for it (a local dev server). Built where libcurl is found.
+    const char *community = nullptr;
     // The category of the features the Online page shows too, as the Features page does (what a match shows: the
     // ping...), or nullptr
     const char *online_features = nullptr;

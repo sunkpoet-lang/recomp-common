@@ -25,6 +25,10 @@
 #include "game_process.h"
 #include "launcher.h"
 #include "online.h"
+#ifdef LAUNCHER_COMMUNITY
+#include "community.h"
+#endif
+#include <deque>
 #include "settings.h"
 #ifdef LAUNCHER_UPDATE_REPO
 #include "update.h"
@@ -33,7 +37,7 @@
 // The launcher's own pages. A port's: Game, Features, Controllers. A collection's: Games (Library), Features and
 // Controllers (for all the games), Multi game (if it has modes that play several games: launcher.h, MultiMode), then
 // one page for each game whose file is chosen (Title).
-enum class Page { Game, Features, Controllers, Library, Title, Multi, Online, Series, Count };
+enum class Page { Game, Features, Controllers, Library, Title, Multi, Online, Series, Community, Count };
 
 // A run that stopped with an error: its log, kept (logs/stopped-<when>.log), and what the runtime said stopped it
 struct StoppedLog {
@@ -271,6 +275,29 @@ private:
     int place_of(Page kind) const;
     void single_online_page(float width);
     void follow_room(bool here);
+    // (ForkAde's fork, discord-community-lobby) The community's address ("" if none: Collection::community, or
+    // FORKADE_COMMUNITY_URL), and the Games page's place in the sidebar (after Community, where there is one)
+    std::string community_url() const;
+    int library_index() const { return community_url().empty() ? 0 : 1; }
+#ifdef LAUNCHER_COMMUNITY
+    // The Community page: signing in with Discord, then who is there and the general chat; followed every frame
+    // (the sign-in's questions, the lobby's socket and its events, this player's state)
+    void community_page(float width);
+    void follow_community();
+    void community_signed_out(const char* why);
+    launcher::CommunitySocket community_;
+    std::future<launcher::SignInRequest> community_request_;
+    launcher::SignInRequest community_signin_;  // (the request under way: its id, empty when none)
+    std::future<launcher::SignInState> community_poll_;
+    Uint64 community_poll_at_ = 0, community_signin_at_ = 0;
+    std::string community_said_;  // (what the sign-in or the lobby last said)
+    launcher::CommunityPerson community_you_;
+    std::vector<launcher::CommunityPerson> community_people_;
+    std::deque<launcher::CommunityMessage> community_messages_;
+    char community_line_[512] = {};
+    bool community_line_active_ = false, community_playing_ = false, community_scroll_ = false;
+    Uint64 community_muted_until_ = 0;
+#endif
     // A card's small capitals, with "Updates every 10 seconds" at the right, and a spinner beside it while `fetching`
     void live_label(const char* text, float width, bool fetching);
     // A card's only row while there is nothing in it: `text`, with a spinner while `looking`

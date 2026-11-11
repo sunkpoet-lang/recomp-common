@@ -47,4 +47,46 @@ private:
     std::vector<std::string> in_;
 };
 
+// ---- Signing in (the service's /v1/auth/request): a request the browser completes through Discord, then asked about
+// with its secret until it says how it went. `base` is the service's address ("https://..."; no trailing slash).
+struct SignInRequest {
+    bool ok = false;
+    std::string id, secret;
+    int busy = 0; // (429: the seconds to wait)
+};
+SignInRequest signin_request(const std::string& base);
+// (where the browser is sent for this request)
+std::string signin_page(const std::string& base, const std::string& id);
+struct SignInState {
+    // "pending" (not done in the browser yet), "waiting" (asked to join, not approved), "not-member", "done" (with the
+    // session and who), "expired", or "" (no answer: the network)
+    std::string state, session, nickname, flag, role;
+    int busy = 0;
+};
+SignInState signin_poll(const std::string& base, const SignInRequest& request);
+
+// ---- The lobby's events, as the service sends them (JSON): only what the launcher shows
+struct CommunityPerson {
+    std::string nickname, flag, role, state;  // (state: "lobby", "playing", "watching")
+};
+struct CommunityMessage {
+    int64_t mid = 0, at = 0;  // (at: milliseconds since 1970, UTC)
+    std::string nickname, flag, role, text;
+};
+struct CommunityEvent {
+    // "hello" (you, presence, history), "message" (message), "presence" (presence), "deleted" (mid), "muted"
+    // (minutes), "refused" (error, wait), or "" (not understood)
+    std::string type;
+    CommunityPerson you;
+    std::vector<CommunityPerson> presence;
+    std::vector<CommunityMessage> history;  // (hello: the history; message: the one message)
+    int64_t mid = 0;
+    int minutes = 0, wait = 0;
+    std::string error;
+};
+CommunityEvent parse_community_event(const std::string& json);
+// A chat line as the service takes it ({"type":"say","text":...}), and the player's state
+std::string community_say(const std::string& text);
+std::string community_state(const std::string& state);
+
 }  // namespace launcher

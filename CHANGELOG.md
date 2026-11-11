@@ -5,6 +5,11 @@ a minor version. A port's copy only changes when it runs `tools/sync-common.sh`.
 
 ## Unreleased
 
+- **The Community page** (ForkAde's discord-community-lobby; `Collection::community`, or `FORKADE_COMMUNITY_URL`): the
+  first page of a collection with a community service. Sign in with Discord (a request the browser completes, asked
+  about every 2 seconds), then who is there (role, lobby/playing/watching, said when a game starts) and the general
+  chat (history, Enter or Send, moderators' Delete, Mute 10 min and Kick). `community_events.cpp`: the sign-in
+  requests and a small JSON reader for the lobby's events. Spanish and Portuguese.
 - **The public lobby's socket** (`launcher/src/community.h`, ForkAde's discord-community-lobby): a WebSocket through
   libcurl on a thread of its own, the session in the Sec-WebSocket-Protocol header, events taken by the launcher's
   frame, lines queued, reconnection with backoff (1-30 s) unless refused or closed with 4001, 4003 or 4004. Built where
