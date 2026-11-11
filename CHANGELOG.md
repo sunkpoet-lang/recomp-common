@@ -5,6 +5,9 @@ a minor version. A port's copy only changes when it runs `tools/sync-common.sh`.
 
 ## Unreleased
 
+- **The registered nickname is the player's name** (ForkAde's fork): signed in to the community, the name of the chat
+  card, a game's online card and the Online page is the nickname from the sign-in, shown greyed, and it is the name
+  given to the game; signing out brings back the name typed before (kept in launcher.ini).
 - **The Community page in three panels** (ForkAde's community-three-panel-layout): the sidebar's games on the left
   (each with how many lobby members play it), the general chat in the centre filling the height (following new
   messages only while at its bottom), the players on the right (you first, then those playing with their game's

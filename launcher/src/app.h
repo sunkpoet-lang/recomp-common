@@ -283,6 +283,8 @@ private:
     // The Community page: signing in with Discord, then who is there and the general chat; followed every frame
     // (the sign-in's questions, the lobby's socket and its events, this player's state)
     void community_page(float width, float height);
+    std::string locked_name() const;
+    void name_field(const char* id, const char* hint, bool chat);
     void community_players(float width);
     std::string community_game_name(const std::string& id) const;
     int community_playing(const std::string& id) const;

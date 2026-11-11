@@ -2753,12 +2753,8 @@ void App::chat_card(float width) {
     ui::text("CHAT", Font::Semibold, ui::size::kDetail, p.secondary);
     ui::gap(10);
     Card card(width);
-    row(width, "Your name", "What the other player sees beside your messages (T opens the chat during a match).", 190.0f, 36.0f, [&] {
-        if (ui::text_field("##chat_name", online_name_, sizeof(online_name_), "Player 1 or 2", 190.0f)) {
-            prefs_.set("online", "name", ChatName(online_name_));
-            prefs_.save();
-        }
-    });
+    row(width, "Your name", locked_name().empty() ? "What the other player sees beside your messages (T opens the chat during a match)." : "Your ForkAde nickname, as you registered it: it comes from your sign-in on the Community page.",
+        190.0f, 36.0f, [&] { name_field("##chat_name", "Player 1 or 2", true); });
     inset_separator(width);
     const bool keep = prefs_.get("chat", "keep") != "off";
     row(width, "Keep chat logs", "Each match's messages are saved on this computer only, never uploaded.", 60.0f, 36.0f, [&] {
@@ -2818,14 +2814,10 @@ void App::online_card(size_t which, float width, bool ready) {
     if (lobby && online.name_argument) {
         inset_separator(width);
         row(width, "Your name",
-            "With a name, the matches you host are listed in the lobby under it until someone joins. Without one, only those you "
-            "give the code to can join.",
-            190.0f, 36.0f, [&] {
-                if (ui::text_field("##online_name", online_name_, sizeof(online_name_), "Your name", 190.0f)) {
-                    prefs_.set("online", "name", online_name_);
-                    prefs_.save();
-                }
-            });
+            !locked_name().empty() ? "Your ForkAde nickname, as you registered it: it comes from your sign-in on the Community page."
+            : "With a name, the matches you host are listed in the lobby under it until someone joins. Without one, only those you "
+              "give the code to can join.",
+            190.0f, 36.0f, [&] { name_field("##online_name", "Your name", false); });
     }
     inset_separator(width);
     row(width, "Join a match",
@@ -3219,15 +3211,11 @@ void App::online_page(float width) {
     layout::label("HOST A MATCH");
     Card host(width);
     row(width, "Your name",
-        collection_->room ? "With a name, the matches you host are listed in the lobby under it, and you're in the waiting room below. Without "
-                            "one, your matches are joined only by their code."
-                          : "With a name, the matches you host are listed in the lobby under it. Without one, they're joined only by their code.",
-        190.0f, 36.0f, [&] {
-        if (ui::text_field("##online_page_name", online_name_, sizeof(online_name_), "Your name", 190.0f)) {
-            prefs_.set("online", "name", online_name_);
-            prefs_.save();
-        }
-    });
+        !locked_name().empty() ? "Your ForkAde nickname, as you registered it: it comes from your sign-in on the Community page."
+        : collection_->room ? "With a name, the matches you host are listed in the lobby under it, and you're in the waiting room below. Without "
+                              "one, your matches are joined only by their code."
+                            : "With a name, the matches you host are listed in the lobby under it. Without one, they're joined only by their code.",
+        190.0f, 36.0f, [&] { name_field("##online_page_name", "Your name", false); });
     inset_separator(width);
     if (playable.empty()) {
         row(width, "No game to host yet", "Choose a game's ROM set on its page first.", 0.0f, 24.0f, [] {});
@@ -5167,6 +5155,34 @@ void App::controllers_page(float width) {
     }
 }
 
+// (ForkAde's fork: signed in to the community, the registered nickname; "" otherwise, and in a launcher without it)
+std::string App::locked_name() const {
+#ifdef LAUNCHER_COMMUNITY
+    if (!prefs_.get("community", "session").empty()) {
+        return prefs_.get("community", "nickname");
+    }
+#endif
+    return std::string();
+}
+
+// The name field of the chat card, a game's online card and the Online page: the registered nickname shown greyed
+// while signed in to the community, else the name typed (kept in launcher.ini; the chat's as ChatName makes it)
+void App::name_field(const char* id, const char* hint, bool chat) {
+    const std::string locked = locked_name();
+    if (!locked.empty()) {
+        char shown[64];
+        std::snprintf(shown, sizeof(shown), "%s", locked.c_str());
+        ImGui::BeginDisabled();
+        ui::text_field(id, shown, sizeof(shown), hint, 190.0f);
+        ImGui::EndDisabled();
+        return;
+    }
+    if (ui::text_field(id, online_name_, sizeof(online_name_), hint, 190.0f)) {
+        prefs_.set("online", "name", chat ? ChatName(online_name_) : std::string(online_name_));
+        prefs_.save();
+    }
+}
+
 #ifdef LAUNCHER_COMMUNITY
 // ---- (ForkAde's fork, discord-community-lobby) The Community page: signing in with Discord, then the public lobby
 
@@ -5213,6 +5229,7 @@ void App::community_signed_out(const char* why) {
     community_.Stop();
     prefs_.set("community", "session", "");
     prefs_.save();
+    std::snprintf(online_name_, sizeof(online_name_), "%s", prefs_.get("online", "name").c_str());
     community_people_.clear();
     community_messages_.clear();
     community_said_ = why;
@@ -5271,6 +5288,11 @@ void App::follow_community() {
     const std::string session = prefs_.get("community", "session");
     if (session.empty()) {
         return;
+    }
+    // (signed in: the name for matches and the chat is the registered nickname; the typed one stays in launcher.ini)
+    const std::string nickname = locked_name();
+    if (!nickname.empty() && nickname != online_name_) {
+        std::snprintf(online_name_, sizeof(online_name_), "%s", nickname.c_str());
     }
     if (community_.state() == launcher::CommunitySocket::State::Off) {
         community_.Start(WebSocketUrl(base), session);

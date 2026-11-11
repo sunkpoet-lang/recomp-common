@@ -81,6 +81,7 @@ inline constexpr Entry kSpanish[] = {
     {"SOUND", "SONIDO"},
     {"Muted", "Silenciado"},
     {"Volume", "Volumen"},
+    {"Your ForkAde nickname, as you registered it: it comes from your sign-in on the Community page.", "Tu apodo de ForkAde, tal como lo registraste: viene de tu sesión en la página Comunidad."},
     {"You", "Tú"},
     {"Playing {}", "Jugando {}"},
     {"Players ({})", "Jugadores ({})"},
