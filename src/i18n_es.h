@@ -92,7 +92,7 @@ inline constexpr Entry kSpanish[] = {
     {". Version {} (you have {}): watching needs the same.", ". Versión {} (tienes la {}): para mirar se necesita la misma."},
     {". Add your {} {} to watch.", ". Agrega el {2} de {1} para mirar."},
     {"Allow spectators", "Permitir espectadores"},
-    {"Up to six people can watch the matches you host, from the Online page and the Community page, and chat with you. Off: your matches refuse them.", "Hasta seis personas pueden mirar las partidas que creas, desde la página En línea y la página Comunidad, y platicar contigo. Apagado: tus partidas los rechazan."},
+    {"Up to six people can watch the matches you host, from the Online page and the Community page. The in-game chat stays between the players. Off: your matches refuse them.", "Hasta seis personas pueden mirar las partidas que creas, desde la página En línea y la página Comunidad. El chat del juego es solo entre los jugadores. Apagado: tus partidas los rechazan."},
     {"Your ForkAde nickname, as you registered it: it comes from your sign-in on the Community page.", "Tu apodo de ForkAde, tal como lo registraste: viene de tu sesión en la página Comunidad."},
     {"You", "Tú"},
     {"Playing {}", "Jugando {}"},

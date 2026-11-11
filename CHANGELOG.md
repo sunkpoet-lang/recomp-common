@@ -5,6 +5,8 @@ a minor version. A port's copy only changes when it runs `tools/sync-common.sh`.
 
 ## Unreleased
 
+- **Allow spectators says the in-game chat stays between the players** (ForkAde's fork, match-spectators section 7):
+  spectators watch, and neither write in nor see the game's chat.
 - **Watch matches being played** (ForkAde's fork, match-spectators): `launcher::PlayingMatch` and `Room::playing` read
   the matches a service lists for watching (names, spectators, a watch id, never a code). The Online page's IN PROGRESS
   card has Watch, the host card Allow spectators, and the Community page's players column Watch on a member playing a

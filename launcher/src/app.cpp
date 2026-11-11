@@ -2963,8 +2963,8 @@ void App::spectators_row(float width) {
     inset_separator(width);
     const bool on = prefs_.get("online", "spectators") != "off";
     row(width, "Allow spectators",
-        "Up to six people can watch the matches you host, from the Online page and the Community page, and chat with you. Off: "
-        "your matches refuse them.",
+        "Up to six people can watch the matches you host, from the Online page and the Community page. The in-game chat stays "
+        "between the players. Off: your matches refuse them.",
         42.0f, 24.0f, [&] {
             if (ui::toggle("##online_spectators", on)) {
                 prefs_.set("online", "spectators", on ? "off" : "on");
