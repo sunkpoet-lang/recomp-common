@@ -38,6 +38,9 @@
 #include "imgui_impl_sdlrenderer3.h"
 #include "imgui_internal.h"
 #include "ui.h"
+#ifdef LAUNCHER_COMMUNITY
+#include "flags.h"
+#endif
 
 namespace {
 
@@ -343,6 +346,9 @@ int main(int argc, char** argv) {
     ui::load_fonts();
     ImGui_ImplSDL3_InitForSDLRenderer(window, renderer);
     ImGui_ImplSDLRenderer3_Init(renderer);
+#ifdef LAUNCHER_COMMUNITY
+    launcher::flags_use_renderer(renderer);
+#endif
     ImGui_ImplSDL3_SetGamepadMode(ImGui_ImplSDL3_GamepadMode_AutoAll);
 
     ui::set_dark(system_dark());
@@ -454,6 +460,9 @@ int main(int argc, char** argv) {
         }
         SDL_RenderPresent(renderer);
     }
+#ifdef LAUNCHER_COMMUNITY
+    launcher::flags_release();
+#endif
     ImGui_ImplSDLRenderer3_Shutdown();
     ImGui_ImplSDL3_Shutdown();
     ImGui::DestroyContext();

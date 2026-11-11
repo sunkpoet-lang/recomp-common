@@ -5,6 +5,10 @@ a minor version. A port's copy only changes when it runs `tools/sync-common.sh`.
 
 ## Unreleased
 
+- **Flags in the Community page** (`launcher/src/flags.h`): the country flag beside each name (this player, who is
+  there, the chat) from a 24x18 picture of every ISO country, flag-icons 7.6.0 (MIT, `THIRD_PARTY_NOTICES.md`),
+  compiled in as a 256-colour atlas (`flags_atlas.inc`, 66 KB); a code with no picture shows none. Moderators' Delete
+  is a small link beside the message's time.
 - **The Community page** (ForkAde's discord-community-lobby; `Collection::community`, or `FORKADE_COMMUNITY_URL`): the
   first page of a collection with a community service. Sign in with Discord (a request the browser completes, asked
   about every 2 seconds), then who is there (role, lobby/playing/watching, said when a game starts) and the general

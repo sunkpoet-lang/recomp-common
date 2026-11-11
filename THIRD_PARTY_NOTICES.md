@@ -49,6 +49,12 @@ is configured and checks its published SHA-256.
 A port that gives out a built launcher must include these three licenses with it (the font is inside
 the program), and the GPL-3.0 with the offer of source that goes with it.
 
+### Pictures compiled into the launcher (ForkAde's fork)
+
+- **flag-icons 7.6.0:** the country flags of the public lobby (`launcher/src/flags_atlas.inc`, its 249
+  ISO 3166-1 flags drawn at 24x18 into one 256-colour picture). **MIT License**. Copyright (c) 2013
+  Panayiotis Lipiridis. https://github.com/lipis/flag-icons
+
 Code added later from another project must have a license compatible with the GPL-3.0 and be listed
 here, with its notice kept in the file. `tools/audit.sh` fails if a file marked as another project's
 is not one of those listed above.

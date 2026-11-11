@@ -5137,10 +5137,27 @@ void App::controllers_page(float width) {
 #ifdef LAUNCHER_COMMUNITY
 // ---- (ForkAde's fork, discord-community-lobby) The Community page: signing in with Discord, then the public lobby
 
+#include "flags.h"
+
 namespace {
-    // (a country code as the page shows it: the font has no flag pictures)
-    std::string FlagLabel(const std::string& flag) {
-        return flag.size() == 2 ? "[" + flag + "]" : std::string();
+    // (a flag's place in front of a name: spaces as wide as the picture and a gap, which the picture is drawn over;
+    // a code with no picture is shown as itself)
+    constexpr float kFlagHeight = 12.0f;
+    std::string FlagLabel(const std::string& flag, float size) {
+        if (flag.size() != 2) {
+            return std::string();
+        }
+        ui::push_font(Font::Regular, size);
+        const float space = std::max(1.0f, ImGui::CalcTextSize(" ").x);
+        ui::pop_font();
+        const int count = static_cast<int>(std::ceil((ui::px(kFlagHeight) * 4.0f / 3.0f + ui::px(6)) / space));
+        return std::string(static_cast<size_t>(count), ' ');
+    }
+    // The flag over the gap FlagLabel left, the text starting at `at` (`size`: the text's)
+    void FlagOver(const std::string& flag, ImVec2 at, float size) {
+        if (flag.size() == 2) {
+            launcher::flag_draw(flag, at.x, at.y + std::round((ui::px(size) * 1.2f - ui::px(kFlagHeight)) * 0.5f), ui::px(kFlagHeight));
+        }
     }
     std::string ClockOf(int64_t at) {
         const std::time_t seconds = static_cast<std::time_t>(at / 1000);
@@ -5300,7 +5317,9 @@ void App::community_page(float width) {
                                                                               : "Connecting…";
     {
         Card me(width);
-        const std::string who = FlagLabel(prefs_.get("community", "flag")) + " " + prefs_.get("community", "nickname");
+        const std::string flag = prefs_.get("community", "flag");
+        const std::string who = FlagLabel(flag, ui::size::kBody) + prefs_.get("community", "nickname");
+        FlagOver(flag, ImGui::GetCursorScreenPos() + ImVec2(ui::px(18), ui::px(14)), ui::size::kBody);
         const std::string detail = community_said_.empty() ? std::string(Tr(status)) : Tr(status) + std::string(" · ") + Tr(community_said_.c_str());
         row(width, who.c_str(), detail.c_str(), 200.0f, 36.0f, [&] {
             if (state == launcher::CommunitySocket::State::Stopped && community_.reason() == 4004) {
@@ -5330,12 +5349,13 @@ void App::community_page(float width) {
             if (i) {
                 inset_separator(width);
             }
-            const std::string name = FlagLabel(one.flag) + " " + one.nickname +
+            FlagOver(one.flag, ImGui::GetCursorScreenPos() + ImVec2(ui::px(18), ui::px(14)), ui::size::kBody);
+            const std::string name = FlagLabel(one.flag, ui::size::kBody) + one.nickname +
                                      (one.role == "admin" ? std::string("  · ") + Tr("Administrator") : one.role == "moderator" ? std::string("  · ") + Tr("Moderator") : std::string());
             const char* doing = one.state == "playing" ? "Playing" : one.state == "watching" ? "Watching" : "In the lobby";
             ImGui::PushID(static_cast<int>(i));
             const bool canModerate = moderator && one.nickname != community_you_.nickname;
-            row(width, name.c_str(), Tr(doing), canModerate ? 230.0f : 0.0f, 32.0f, [&] {
+            row(width, name.c_str(), Tr(doing), canModerate ? 250.0f : 0.0f, 32.0f, [&] {
                 if (!canModerate) {
                     return;
                 }
@@ -5361,13 +5381,22 @@ void App::community_page(float width) {
     for (size_t i = 0; i < community_messages_.size(); i++) {
         const launcher::CommunityMessage& m = community_messages_[i];
         ImGui::PushID(static_cast<int>(m.mid));
-        const std::string head = FlagLabel(m.flag) + " " + m.nickname + "   " + ClockOf(m.at);
+        FlagOver(m.flag, ImGui::GetCursorScreenPos(), ui::size::kDetail);
+        const std::string head = FlagLabel(m.flag, ui::size::kDetail) + m.nickname + "   " + ClockOf(m.at);
         ui::text(head.c_str(), Font::Semibold, ui::size::kDetail, m.role == "admin" || m.role == "moderator" ? p.accent : p.secondary);
         if (moderator) {
-            ImGui::SameLine();
+            // (a quiet link after the time, not a button that draws the eye from the conversation)
+            ImGui::SameLine(0.0f, px(12));
+            ImGui::PushStyleColor(ImGuiCol_Button, IM_COL32(0, 0, 0, 0));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, p.control_hover);
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive, p.control_active);
+            ImGui::PushStyleColor(ImGuiCol_Text, p.tertiary);
+            ui::push_font(Font::Regular, ui::size::kSmall);
             if (ImGui::SmallButton(Tr("Delete"))) {
                 community_.Send("{\"type\":\"delete\",\"mid\":" + std::to_string(m.mid) + "}");
             }
+            ui::pop_font();
+            ImGui::PopStyleColor(4);
         }
         // (plain text: no link in it can be opened from here)
         ui::text(m.text.c_str(), Font::Regular, ui::size::kBody, p.text, wrap);
