@@ -5,6 +5,10 @@ a minor version. A port's copy only changes when it runs `tools/sync-common.sh`.
 
 ## Unreleased
 
+- **The public lobby's socket** (`launcher/src/community.h`, ForkAde's discord-community-lobby): a WebSocket through
+  libcurl on a thread of its own, the session in the Sec-WebSocket-Protocol header, events taken by the launcher's
+  frame, lines queued, reconnection with backoff (1-30 s) unless refused or closed with 4001, 4003 or 4004. Built where
+  libcurl is found (`LAUNCHER_COMMUNITY`); the launcher builds as before without it.
 - **The launcher waits when the online service is busy** (`launcher::busy_seconds`): a 429 from the waiting room, the
   lobby or a code lookup is waited out for its `retry` seconds (10 if none, at most 600) with "The online service is
   busy" said, and what was shown is kept.
