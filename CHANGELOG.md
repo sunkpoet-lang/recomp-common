@@ -5,6 +5,11 @@ a minor version. A port's copy only changes when it runs `tools/sync-common.sh`.
 
 ## Unreleased
 
+- **Watch matches being played** (ForkAde's fork, match-spectators): `launcher::PlayingMatch` and `Room::playing` read
+  the matches a service lists for watching (names, spectators, a watch id, never a code). The Online page's IN PROGRESS
+  card has Watch, the host card Allow spectators, and the Community page's players column Watch on a member playing a
+  match open to spectators (presence's `watch`). All of it shows only in a launcher that can watch (`App::watch_playing_`,
+  `App::playing_watch_id_`); without them the launcher is as before.
 - **The registered nickname is the player's name** (ForkAde's fork): signed in to the community, the name of the chat
   card, a game's online card and the Online page is the nickname from the sign-in, shown greyed, and it is the name
   given to the game; signing out brings back the name typed before (kept in launcher.ini).

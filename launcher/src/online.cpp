@@ -267,6 +267,30 @@ std::vector<OpenMatch> Matches(const std::string& json) {
     return matches;
 }
 
+// {"playing":[{"game","title","version","build","names":[...],"spectators","watch","playing"}, ...]}: (ForkAde's fork,
+// match-spectators) the matches being played, in a waiting room check-in's answer
+std::vector<PlayingMatch> Playing(const std::string& json) {
+    std::vector<PlayingMatch> out;
+    for (const auto& [at, end] : Objects(json, "playing")) {
+        PlayingMatch one{Text(json, at, end, "game"), Text(json, at, end, "title"), Text(json, at, end, "version"),
+                         Text(json, at, end, "build"), Strings(json, at, end, "names")};
+        const size_t spectators = json.find("\"spectators\":", at);
+        one.spectators = spectators != std::string::npos && spectators < end ? std::atoi(json.c_str() + spectators + 13) : 0;
+        one.watch = Text(json, at, end, "watch");
+        bool valid = one.watch.size() == 16;
+        for (const char c : one.watch) {
+            valid = valid && ((c >= 'a' && c <= 'z') || (c >= '2' && c <= '7'));
+        }
+        if (!valid) {
+            one.watch.clear();
+        }
+        if (!one.game.empty()) {
+            out.push_back(one);
+        }
+    }
+    return out;
+}
+
 // (sent on a thread of its own: the launcher doesn't wait for the answer)
 void PostAway(const std::string& url, const std::string& body) {
     std::thread([url, body] { std::string ignored; Post(url, body, &ignored); }).detach();
@@ -319,6 +343,7 @@ Room room_check_in(const std::string& url, const RoomCheckIn& me) {
     // (the lobby's list too, asked for: from a service that says it)
     room.listed = json.find("\"matches\":[") != std::string::npos;
     room.matches = Matches(json);
+    room.playing = Playing(json);
     const size_t players = json.find("\"players\":[");
     room.id = Text(json, 0, players, "id");
     for (const auto& [at, end] : Objects(json, "players")) {

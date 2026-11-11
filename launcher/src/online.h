@@ -26,6 +26,15 @@ struct OpenMatch {
     std::string name;
     int waiting = 0; // (seconds)
 };
+// (ForkAde's fork, match-spectators) A match being played, offered for watching: its players' names, how many watch,
+// and its watch id while spectators are allowed and there is room ("" otherwise); never its codes
+struct PlayingMatch {
+    std::string game, title, version, build;
+    std::vector<std::string> names; // (the host's, then the opponent's)
+    int spectators = 0;
+    std::string watch;
+    int playing = 0; // (seconds)
+};
 // The lobby's list, fetched from `url` with the system's curl (blocks: for another thread); false if there was no
 // answer
 bool fetch_lobby(const std::string& url, std::vector<OpenMatch>& matches, int* busy = nullptr);
@@ -72,6 +81,7 @@ struct Room {
     std::vector<Invitation> invitations;
     bool listed = false; // (the lobby's list came with it: asked for (RoomCheckIn::lobby), and from a service that says it)
     std::vector<OpenMatch> matches;
+    std::vector<PlayingMatch> playing; // (ForkAde's fork, match-spectators: the matches being played, from a service that lists them)
     int busy = 0; // (the service asked to be left alone this many seconds: busy_seconds)
 };
 // A check-in at `url` (blocks: for another thread)

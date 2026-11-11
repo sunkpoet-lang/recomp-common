@@ -69,6 +69,7 @@ SignInState signin_poll(const std::string& base, const SignInRequest& request);
 struct CommunityPerson {
     std::string nickname, flag, role, state;  // (state: "lobby", "playing", "watching")
     std::string game;                         // (playing: the game's id, when said; community-three-panel-layout)
+    std::string watch;                        // (playing a match open to spectators: its watch id; match-spectators)
 };
 struct CommunityMessage {
     int64_t mid = 0, at = 0;  // (at: milliseconds since 1970, UTC)
@@ -89,6 +90,7 @@ CommunityEvent parse_community_event(const std::string& json);
 // A chat line as the service takes it ({"type":"say","text":...}), and the player's state
 std::string community_say(const std::string& text);
 // (game: the id of the game being played, sent with "playing" only; the service keeps [a-z0-9_]{1,24})
-std::string community_state(const std::string& state, const std::string& game = "");
+// (watch: the match's watch id, from the match service, with a game only)
+std::string community_state(const std::string& state, const std::string& game = "", const std::string& watch = "");
 
 }  // namespace launcher

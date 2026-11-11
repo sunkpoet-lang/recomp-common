@@ -2811,6 +2811,7 @@ void App::online_card(size_t which, float width, bool ready) {
         }
     });
     arcade_row(width, online);
+    spectators_row(width);
     if (lobby && online.name_argument) {
         inset_separator(width);
         row(width, "Your name",
@@ -2896,6 +2897,77 @@ void App::arcade_row(float width, const launcher::Online& online) {
         42.0f, 24.0f, [&] {
             if (ui::toggle("##online_arcade", on)) {
                 prefs_.set("online", "arcade", on ? "0" : "1");
+                prefs_.save();
+            }
+        });
+}
+
+// (ForkAde's fork, match-spectators) The matches being played that the service lists for watching: the players, the
+// game, how many watch, and Watch while the host allows spectators and there is room. Only in a launcher that can watch
+// (watch_playing_)
+void App::playing_card(float width) {
+    if (!watch_playing_) {
+        return;
+    }
+    ui::gap(24);
+    live_label("IN PROGRESS", width, false);
+    Card card(width);
+    if (room_.playing.empty()) {
+        empty_row(width, Tr("Nobody is playing a match that can be watched right now."), false);
+    }
+    int n = 0;
+    for (const launcher::PlayingMatch& match : room_.playing) {
+        if (n) {
+            inset_separator(width);
+        }
+        size_t which = slots_.size();
+        for (size_t i = 0; i < slots_.size(); i++) {
+            if (slots_[i]->id == match.game) {
+                which = i;
+            }
+        }
+        const std::string game = which < slots_.size() ? slots_[which]->name : (match.title.empty() ? match.game : match.title);
+        const std::string first = match.names.size() > 0 && !match.names[0].empty() ? match.names[0] : Tr("Player 1");
+        const std::string second = match.names.size() > 1 && !match.names[1].empty() ? match.names[1] : Tr("Player 2");
+        const std::string players = TrFormat("{} vs {}", {first, second});
+        // (why Watch can't be pressed, if it can't)
+        // (the match's own first: one that can't be watched by anyone says so before what this player would need)
+        std::string why;
+        if (match.watch.empty()) {
+            why = match.spectators >= 6 ? std::string(". ") + Tr("Full: six are watching.") : std::string(". ") + Tr("Not open to spectators.");
+        } else if (which >= slots_.size()) {
+            why = TrFormat(". Not in your version of {}.", {LAUNCHER_GAME_NAME});
+        } else if (!version_matches(match.version)) {
+            why = TrFormat(". Version {} (you have {}): watching needs the same.", {match.version, own_version()});
+        } else if (!can_play(which)) {
+            why = TrFormat(". Add your {} {} to watch.", {slots_[which]->name, Tr(collection_->file_name)});
+        }
+        const std::string detail = game + ": " + TrFormat("{} watching", {std::to_string(match.spectators)}) + why;
+        ImGui::PushID(n++);
+        row(width, players.c_str(), detail.c_str(), 130.0f, 36.0f, [&] {
+            if (ui::button("Watch", Kind::Primary, 130.0f, why.empty() && !any_running())) {
+                watch_playing_(match);
+            }
+        }, !why.empty());
+        ImGui::PopID();
+    }
+    card.end();
+}
+
+// (ForkAde's fork, match-spectators) Allow spectators: on, up to six may watch this player's matches from the lobby and
+// the Community page; off, the game refuses them. Only in a launcher that can watch
+void App::spectators_row(float width) {
+    if (!watch_playing_) {
+        return;
+    }
+    inset_separator(width);
+    const bool on = prefs_.get("online", "spectators") != "off";
+    row(width, "Allow spectators",
+        "Up to six people can watch the matches you host, from the Online page and the Community page, and chat with you. Off: "
+        "your matches refuse them.",
+        42.0f, 24.0f, [&] {
+            if (ui::toggle("##online_spectators", on)) {
+                prefs_.set("online", "spectators", on ? "off" : "on");
                 prefs_.save();
             }
         });
@@ -3141,6 +3213,7 @@ void App::online_page(float width) {
         ImGui::PopID();
     }
     list.end();
+    playing_card(width);
     // Join with a code: which game it is for, asked of the service, and that game started with it
     if (collection_->code_lookup) {
         if (join_lookup_.valid() && join_lookup_.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
@@ -3243,6 +3316,7 @@ void App::online_page(float width) {
                 }
             });
         arcade_row(width, online);
+        spectators_row(width);
     }
     host.end();
     // The features about a match (Collection::online_features), as the Features page has them: set for every game
@@ -5317,7 +5391,7 @@ void App::follow_community() {
             community_scroll_always_ = true;
             community_said_.clear();
             if (community_playing_) {
-                community_.Send(launcher::community_state("playing", community_game_));
+                community_.Send(launcher::community_state("playing", community_game_, community_watch_));
             }
         } else if (e.type == "presence") {
             community_people_ = e.presence;
@@ -5347,10 +5421,13 @@ void App::follow_community() {
             break;
         }
     }
-    if (playing != community_playing_ || game != community_game_) {
+    // (match-spectators: the match's watch id while this player hosts it open to spectators, as the launcher has it)
+    const std::string watch = playing && playing_watch_id_ ? playing_watch_id_() : std::string();
+    if (playing != community_playing_ || game != community_game_ || watch != community_watch_) {
         community_playing_ = playing;
         community_game_ = game;
-        community_.Send(launcher::community_state(playing ? "playing" : "lobby", game));
+        community_watch_ = watch;
+        community_.Send(launcher::community_state(playing ? "playing" : "lobby", game, watch));
     }
 }
 
@@ -5430,11 +5507,22 @@ void App::community_players(float width) {
             doing = Tr(one.state == "watching" ? "Watching" : "In the lobby");
         }
         ui::text(doing.c_str(), Font::Regular, ui::size::kDetail, one.state == "playing" ? p.accent : p.secondary, text_width);
+        // (match-spectators 6.4) Watch, for a member playing a match open to spectators, in a launcher that can watch:
+        // the same request as the Online page's, which checks the game, the version and the build
+        const bool watchable = !me && one.state == "playing" && !one.watch.empty() && watch_playing_;
+        // (its place kept here; it is drawn over the row's own item below, so that it is the one pressed)
+        ImVec2 watch_at;
+        if (watchable) {
+            ui::gap(4);
+            watch_at = ImGui::GetCursorScreenPos();
+            ImGui::Dummy(ImVec2(px(110), px(36)));
+        }
         // (the row as an item: the arrow keys and a gamepad go along the list, and it scrolls to the one they are on;
         // for moderators, pressing another member's row opens its menu, with a quiet "..." at the end saying so)
         const ImVec2 back = ImGui::GetCursorScreenPos();
         const bool menu = moderator && !me;
         ImGui::SetCursorScreenPos(top - ImVec2(px(6), px(4)));
+        ImGui::SetNextItemAllowOverlap();  // (Watch, drawn after, over it)
         if (ImGui::InvisibleButton("##row", ImVec2(width + px(12), back.y - top.y + px(8)), ImGuiButtonFlags_EnableNav) && menu) {
             ImGui::OpenPopup("##moderate");
         }
@@ -5455,6 +5543,27 @@ void App::community_players(float width) {
             layers->AddText(ImVec2(top.x + width - px(16), top.y + px(2)), p.tertiary, "...");
         }
         layers->ChannelsMerge();
+        if (watchable) {
+            const ImVec2 after = ImGui::GetCursorScreenPos();
+            ImGui::SetCursorScreenPos(watch_at);
+            bool have = false;
+            for (size_t i = 0; i < slots_.size(); i++) {
+                have = have || (slots_[i]->id == one.game && can_play(i));
+            }
+            if (ui::button("Watch", Kind::Secondary, 110.0f, have && !any_running())) {
+                launcher::PlayingMatch asked;
+                asked.game = one.game;
+                asked.version = own_version();  // (the service says if it is another)
+                asked.names = {one.nickname};
+                asked.watch = one.watch;
+                watch_playing_(asked);
+            }
+            if (!have) {
+                ImGui::SameLine(0.0f, px(8));
+                ui::text(Tr("You don't have this game."), Font::Regular, ui::size::kSmall, p.tertiary);
+            }
+            ImGui::SetCursorScreenPos(after);
+        }
         if (ImGui::BeginPopup("##moderate")) {
             ui::text(one.nickname.c_str(), Font::Semibold, ui::size::kDetail, p.secondary);
             if (ImGui::MenuItem(Tr("Mute 10 min"))) {

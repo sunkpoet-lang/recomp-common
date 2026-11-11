@@ -222,7 +222,7 @@ namespace {
     }
 
     CommunityPerson Person(const Json& j) {
-        return {j["nickname"].str(), j["flag"].str(), j["role"].str(), j["state"].str(), j["game"].str()};
+        return {j["nickname"].str(), j["flag"].str(), j["role"].str(), j["state"].str(), j["game"].str(), j["watch"].str()};
     }
 
     CommunityMessage Message(const Json& j) {
@@ -288,8 +288,10 @@ std::string community_say(const std::string& text) {
     return "{\"type\":\"say\",\"text\":" + Quoted(text) + "}";
 }
 
-std::string community_state(const std::string& state, const std::string& game) {
-    return "{\"type\":\"state\",\"state\":" + Quoted(state) + (state == "playing" && !game.empty() ? ",\"game\":" + Quoted(game) : std::string()) + "}";
+std::string community_state(const std::string& state, const std::string& game, const std::string& watch) {
+    const bool playing = state == "playing" && !game.empty();
+    return "{\"type\":\"state\",\"state\":" + Quoted(state) + (playing ? ",\"game\":" + Quoted(game) : std::string()) +
+           (playing && !watch.empty() ? ",\"watch\":" + Quoted(watch) : std::string()) + "}";
 }
 
 }  // namespace launcher

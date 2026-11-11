@@ -9,6 +9,8 @@
 // after, the right stick to scroll), as well as with the mouse. A ring is round what they are on.
 #pragma once
 
+#include <functional>
+
 #include <SDL3/SDL.h>
 
 #include <atomic>
@@ -250,6 +252,14 @@ private:
     // Join's: the match (a code or an address), and the player's name, which the game shows the other player
     std::vector<std::string> join_arguments(const launcher::Online& online, const std::string& match) const;
     void arcade_row(float width, const launcher::Online& online);
+    // (ForkAde's fork, match-spectators) the matches being played, with Watch, and Allow spectators: only where
+    // the launcher can watch (watch_playing_, set by ForkAde's launcher)
+    void playing_card(float width);
+    void spectators_row(float width);
+    std::function<void(const launcher::PlayingMatch&)> watch_playing_;
+    // (... and the watch id of the match this player hosts while it is open to spectators, for the community's presence)
+    std::function<std::string()> playing_watch_id_;
+    std::string community_watch_;  // (the watch id said to the lobby)
     void lobby_card(size_t which, float width, bool ready);
     // The Online page (a collection with a lobby: Collection::lobby): host in the lobby in any game, and every game's
     // open matches
