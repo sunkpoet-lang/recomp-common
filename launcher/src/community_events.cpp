@@ -222,7 +222,7 @@ namespace {
     }
 
     CommunityPerson Person(const Json& j) {
-        return {j["nickname"].str(), j["flag"].str(), j["role"].str(), j["state"].str()};
+        return {j["nickname"].str(), j["flag"].str(), j["role"].str(), j["state"].str(), j["game"].str()};
     }
 
     CommunityMessage Message(const Json& j) {
@@ -288,8 +288,8 @@ std::string community_say(const std::string& text) {
     return "{\"type\":\"say\",\"text\":" + Quoted(text) + "}";
 }
 
-std::string community_state(const std::string& state) {
-    return "{\"type\":\"state\",\"state\":" + Quoted(state) + "}";
+std::string community_state(const std::string& state, const std::string& game) {
+    return "{\"type\":\"state\",\"state\":" + Quoted(state) + (state == "playing" && !game.empty() ? ",\"game\":" + Quoted(game) : std::string()) + "}";
 }
 
 }  // namespace launcher

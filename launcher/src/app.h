@@ -282,7 +282,10 @@ private:
 #ifdef LAUNCHER_COMMUNITY
     // The Community page: signing in with Discord, then who is there and the general chat; followed every frame
     // (the sign-in's questions, the lobby's socket and its events, this player's state)
-    void community_page(float width);
+    void community_page(float width, float height);
+    void community_players(float width);
+    std::string community_game_name(const std::string& id) const;
+    int community_playing(const std::string& id) const;
     void follow_community();
     void community_signed_out(const char* why);
     launcher::CommunitySocket community_;
@@ -296,6 +299,9 @@ private:
     std::deque<launcher::CommunityMessage> community_messages_;
     char community_line_[512] = {};
     bool community_line_active_ = false, community_playing_ = false, community_scroll_ = false;
+    std::string community_game_;  // (the id of the game being played, said to the lobby)
+    bool community_scroll_always_ = false;
+    bool community_focus_players_ = false;  // (Right from the chat: the ring to the first player)  // (the hello: the chat goes to its end whatever its scroll)
     Uint64 community_muted_until_ = 0;
 #endif
     // A card's small capitals, with "Updates every 10 seconds" at the right, and a spinner beside it while `fetching`

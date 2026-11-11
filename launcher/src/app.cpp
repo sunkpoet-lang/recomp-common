@@ -1909,6 +1909,33 @@ void App::sidebar(float height) {
                 toggle = slots_[which]->series;
             }
         }
+#ifdef LAUNCHER_COMMUNITY
+        // (community-three-panel-layout: how many lobby members play this game, an accent pill at the row's end)
+        // (a series' row: the sum of its games, so that the count shows while it is closed)
+        if (row) {
+            int counted = 0;
+            if (row->series) {
+                for (const auto& one : slots_) {
+                    counted += one->series == slots_[which]->series ? community_playing(one->id) : 0;
+                }
+            } else {
+                counted = community_playing(slots_[which]->id);
+            }
+            if (const int playing = counted) {
+                const std::string count = std::to_string(playing);
+                ui::push_font(Font::Semibold, ui::size::kSmall);
+                const ImVec2 size = ImGui::CalcTextSize(count.c_str());
+                ui::pop_font();
+                const float pill_w = std::max(px(20), size.x + px(10)), pill_h = px(18);
+                const ImVec2 end(ImGui::GetItemRectMax().x - px(10), (ImGui::GetItemRectMin().y + ImGui::GetItemRectMax().y) * 0.5f);
+                const ImVec2 a(end.x - pill_w, end.y - pill_h * 0.5f), b(end.x, end.y + pill_h * 0.5f);
+                ImGui::GetWindowDrawList()->AddRectFilled(a, b, ui::palette().accent, pill_h * 0.5f);
+                ui::push_font(Font::Semibold, ui::size::kSmall);
+                ImGui::GetWindowDrawList()->AddText(ImVec2(a.x + (pill_w - size.x) * 0.5f, a.y + (pill_h - size.y) * 0.5f), IM_COL32(255, 255, 255, 255), count.c_str());
+                ui::pop_font();
+            }
+        }
+#endif
         if (kind == Page::Library && update_news()) {
             // (a new version: a dot at the Games row's end, where its update card is)
             const ImVec2 at(ImGui::GetItemRectMax().x - px(18), (ImGui::GetItemRectMin().y + ImGui::GetItemRectMax().y) * 0.5f);
@@ -2007,7 +2034,13 @@ void App::page(float width, float height) {
     ImGuiID child = shown_kind == Page::Title    ? ImHashStr(slots_[shown_game]->id.c_str())
                     : shown_kind == Page::Series ? ImHashStr(("series:" + slots_[shown_game]->series).c_str())
                                                  : static_cast<ImGuiID>(page_ + 100);
-    ImGui::BeginChild(child, ImVec2(width, height), ImGuiChildFlags_AlwaysUseWindowPadding);
+    // (a signed-in Community page lays out the whole page itself: its chat and players scroll, the page does not)
+    bool whole_page = false;
+#ifdef LAUNCHER_COMMUNITY
+    whole_page = shown_kind == Page::Community && !prefs_.get("community", "session").empty();
+#endif
+    ImGui::BeginChild(child, ImVec2(width, height), ImGuiChildFlags_AlwaysUseWindowPadding,
+                      whole_page ? ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse : 0);
     ImGui::PushItemFlag(ImGuiItemFlags_NoNav, false);
     // (The sidebar and the page are apart for the arrow keys and a gamepad: ImGui's own search would go from
     // a sidebar row to whatever in the page is nearest. Left, Right and Back go between them: navigation().)
@@ -2064,7 +2097,7 @@ void App::page(float width, float height) {
         break;
     case Page::Community:
 #ifdef LAUNCHER_COMMUNITY
-        community_page(content);
+        community_page(whole_page ? width - px(page_padding_x()) * 2 : content, height - px(page_padding_top()) * 2);
 #endif
         break;
     case Page::Multi:
@@ -5259,9 +5292,10 @@ void App::follow_community() {
             community_people_ = e.presence;
             community_messages_.assign(e.history.begin(), e.history.end());
             community_scroll_ = true;
+            community_scroll_always_ = true;
             community_said_.clear();
             if (community_playing_) {
-                community_.Send(launcher::community_state("playing"));
+                community_.Send(launcher::community_state("playing", community_game_));
             }
         } else if (e.type == "presence") {
             community_people_ = e.presence;
@@ -5282,24 +5316,154 @@ void App::follow_community() {
             community_said_ = e.wait ? TrFormat("{} Wait {} seconds.", {Tr(e.error.c_str()), std::to_string(e.wait)}) : Tr(e.error.c_str());
         }
     }
-    // (playing or not: said to the lobby when it changes)
+    // (playing or not, and which game: said to the lobby when it changes)
     const bool playing = any_running();
-    if (playing != community_playing_) {
+    std::string game;
+    for (const auto& one : slots_) {
+        if (one->game.running()) {
+            game = one->id;
+            break;
+        }
+    }
+    if (playing != community_playing_ || game != community_game_) {
         community_playing_ = playing;
-        community_.Send(launcher::community_state(playing ? "playing" : "lobby"));
+        community_game_ = game;
+        community_.Send(launcher::community_state(playing ? "playing" : "lobby", game));
     }
 }
 
-void App::community_page(float width) {
+// (community-three-panel-layout: the name of a game a member plays, from this collection's own games; "" for one it
+// hasn't, so no text from other members is shown here)
+std::string App::community_game_name(const std::string& id) const {
+    for (const auto& one : slots_) {
+        if (!id.empty() && one->id == id) {
+            return one->name;
+        }
+    }
+    return std::string();
+}
+
+// (how many present members play a game: the sidebar's counts)
+int App::community_playing(const std::string& id) const {
+    int count = 0;
+    for (const launcher::CommunityPerson& one : community_people_) {
+        count += one.state == "playing" && !id.empty() && one.game == id;
+    }
+    return count;
+}
+
+// The players: this player first, then those playing, then the rest, each alphabetically; `width` in pixels
+void App::community_players(float width) {
     const ui::Palette& p = ui::palette();
-    layout::heading("Community", "ForkAde's players: talk, meet, and find someone to play.", width);
+    const bool moderator = community_you_.role == "moderator" || community_you_.role == "admin";
+    std::vector<const launcher::CommunityPerson*> order;
+    for (const launcher::CommunityPerson& one : community_people_) {
+        order.push_back(&one);
+    }
+    auto lower = [](std::string s) {
+        for (char& c : s) {
+            c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        }
+        return s;
+    };
+    std::stable_sort(order.begin(), order.end(), [&](const launcher::CommunityPerson* a, const launcher::CommunityPerson* b) {
+        const bool am = a->nickname == community_you_.nickname, bm = b->nickname == community_you_.nickname;
+        if (am != bm) {
+            return am;
+        }
+        const bool ap = a->state == "playing", bp = b->state == "playing";
+        if (ap != bp) {
+            return ap;
+        }
+        return lower(a->nickname) < lower(b->nickname);
+    });
+    if (order.empty()) {
+        ui::text(Tr("Nobody else is here right now."), Font::Regular, ui::size::kDetail, p.tertiary, width);
+    }
+    for (size_t i = 0; i < order.size(); i++) {
+        const launcher::CommunityPerson& one = *order[i];
+        const bool me = one.nickname == community_you_.nickname;
+        ImGui::PushID(one.nickname.c_str());
+        const ImVec2 top = ImGui::GetCursorScreenPos();
+        // (two layers: the row's hover behind, its words in front)
+        ImDrawList* layers = ImGui::GetWindowDrawList();
+        layers->ChannelsSplit(2);
+        layers->ChannelsSetCurrent(1);
+        // (the first line: flag, nickname, badge; the second: what they do)
+        FlagOver(one.flag, top, ui::size::kBody);
+        const std::string name = FlagLabel(one.flag, ui::size::kBody) + one.nickname;
+        // (room at the row's end for a moderator's menu)
+        const float text_width = width - (moderator && !me ? px(40) : 0.0f);
+        ui::text(name.c_str(), me ? Font::Semibold : Font::Regular, ui::size::kBody, p.text, text_width);
+        const char* badge = me ? "You" : one.role == "admin" ? "Administrator" : one.role == "moderator" ? "Moderator" : nullptr;
+        if (badge) {
+            ImGui::SameLine(0.0f, px(8));
+            ui::text(Tr(badge), Font::Semibold, ui::size::kSmall, me ? p.tertiary : p.accent);
+        }
+        std::string doing;
+        if (one.state == "playing") {
+            const std::string game = community_game_name(one.game);
+            doing = game.empty() ? std::string(Tr("Playing")) : TrFormat("Playing {}", {game});
+        } else {
+            doing = Tr(one.state == "watching" ? "Watching" : "In the lobby");
+        }
+        ui::text(doing.c_str(), Font::Regular, ui::size::kDetail, one.state == "playing" ? p.accent : p.secondary, text_width);
+        // (the row as an item: the arrow keys and a gamepad go along the list, and it scrolls to the one they are on;
+        // for moderators, pressing another member's row opens its menu, with a quiet "..." at the end saying so)
+        const ImVec2 back = ImGui::GetCursorScreenPos();
+        const bool menu = moderator && !me;
+        ImGui::SetCursorScreenPos(top - ImVec2(px(6), px(4)));
+        if (ImGui::InvisibleButton("##row", ImVec2(width + px(12), back.y - top.y + px(8)), ImGuiButtonFlags_EnableNav) && menu) {
+            ImGui::OpenPopup("##moderate");
+        }
+        if (i == 0 && community_focus_players_) {
+            ui::focus_item();
+            community_focus_players_ = false;
+        }
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_NoNavOverride) && menu) {
+            layers->ChannelsSetCurrent(0);
+            layers->AddRectFilled(ImGui::GetItemRectMin(), ImGui::GetItemRectMax(), p.control_hover, px(8));
+            layers->ChannelsSetCurrent(1);
+        }
+        // (the launcher's ring, as its own widgets draw it, round the row the arrow keys or a gamepad are on)
+        if (ImGui::IsItemFocused() && ui::focus_shown()) {
+            ImGui::GetWindowDrawList()->AddRect(ImGui::GetItemRectMin(), ImGui::GetItemRectMax(), p.accent, px(8), std::max(2.0f, px(2.5f)));
+        }
+        if (menu) {
+            layers->AddText(ImVec2(top.x + width - px(16), top.y + px(2)), p.tertiary, "...");
+        }
+        layers->ChannelsMerge();
+        if (ImGui::BeginPopup("##moderate")) {
+            ui::text(one.nickname.c_str(), Font::Semibold, ui::size::kDetail, p.secondary);
+            if (ImGui::MenuItem(Tr("Mute 10 min"))) {
+                community_.Send("{\"type\":\"mute\",\"nickname\":\"" + one.nickname + "\",\"minutes\":10}");
+            }
+            if (ImGui::MenuItem(Tr("Kick"))) {
+                community_.Send("{\"type\":\"kick\",\"nickname\":\"" + one.nickname + "\"}");
+            }
+            ImGui::EndPopup();
+        }
+        ImGui::SetCursorScreenPos(back);
+        ImGui::Dummy(ImVec2(0, 0));
+        ui::gap(12);
+        ImGui::PopID();
+    }
+}
+
+// The Community page. Signed out: the sign-in card in the usual column. Signed in (community-three-panel-layout):
+// the general chat in the centre, filling the height, and the players on the right; the sidebar's games are the left.
+// `width` and `height`: the page's room inside its padding, in pixels.
+void App::community_page(float width, float height) {
+    const ui::Palette& p = ui::palette();
     const std::string session = prefs_.get("community", "session");
     if (session.empty()) {
-        Card card(width);
+        const float column = std::min(width, px(kContentMaxWidth));
+        layout::heading("Community", "ForkAde's players: talk, meet, and find someone to play.", column);
+        Card card(column);
         const bool asking = community_request_.valid() || !community_signin_.id.empty();
         const char* detail = !community_said_.empty() ? community_said_.c_str()
                                                       : "For approved members of the beta. Ask to join on ForkAde's join page first.";
-        row(width, "Sign in with Discord", Tr(detail), 220.0f, 36.0f, [&] {
+        row(column, "Sign in with Discord", Tr(detail), 220.0f, 36.0f, [&] {
             if (ui::button(asking ? "Waiting for the browser…" : "Sign in with Discord", Kind::Primary, 220.0f, !asking)) {
                 community_said_.clear();
                 const std::string base = community_url();
@@ -5309,81 +5473,90 @@ void App::community_page(float width) {
         card.end();
         return;
     }
-    // Who this player is, and the lobby's state
     const launcher::CommunitySocket::State state = community_.state();
     const char* status = state == launcher::CommunitySocket::State::Open      ? "In the lobby"
                          : state == launcher::CommunitySocket::State::Waiting ? "Reconnecting…"
                          : state == launcher::CommunitySocket::State::Stopped ? "Out of the lobby"
                                                                               : "Connecting…";
+    const bool narrow_page = width < px(760);
+    const float origin_y = ImGui::GetCursorScreenPos().y;
+
+    // The header: the title, this player's state, Sign out (or Enter the lobby again after a kick)
+    const ImVec2 head = ImGui::GetCursorScreenPos();
+    ui::text(Tr("Community"), Font::Semibold, ui::size::kHeading, p.text);
+    const float head_bottom = ImGui::GetItemRectMax().y;
     {
-        Card me(width);
-        const std::string flag = prefs_.get("community", "flag");
-        const std::string who = FlagLabel(flag, ui::size::kBody) + prefs_.get("community", "nickname");
-        FlagOver(flag, ImGui::GetCursorScreenPos() + ImVec2(ui::px(18), ui::px(14)), ui::size::kBody);
-        const std::string detail = community_said_.empty() ? std::string(Tr(status)) : Tr(status) + std::string(" · ") + Tr(community_said_.c_str());
-        row(width, who.c_str(), detail.c_str(), 200.0f, 36.0f, [&] {
-            if (state == launcher::CommunitySocket::State::Stopped && community_.reason() == 4004) {
-                if (ui::button("Enter the lobby again", Kind::Secondary, 200.0f)) {
-                    community_said_.clear();
-                    community_.Start(WebSocketUrl(community_url()), session);
-                }
-            } else if (ui::button("Sign out", Kind::Secondary, 120.0f)) {
-                community_signed_out("");
+        const bool kicked = state == launcher::CommunitySocket::State::Stopped && community_.reason() == 4004;
+        const float button = kicked ? 200.0f : 110.0f;
+        ImGui::SetCursorScreenPos(ImVec2(head.x + width - px(button), head.y + px(2)));
+        if (kicked) {
+            if (ui::button("Enter the lobby again", Kind::Secondary, button)) {
+                community_said_.clear();
+                community_.Start(WebSocketUrl(community_url()), session);
             }
-        });
-        me.end();
+        } else if (ui::button("Sign out", Kind::Secondary, button)) {
+            community_signed_out("");
+            return;
+        }
+        const std::string said = community_said_.empty() ? std::string(Tr(status)) : Tr(status) + std::string(" · ") + Tr(community_said_.c_str());
+        ui::push_font(Font::Regular, ui::size::kDetail);
+        const float said_width = std::min(ImGui::CalcTextSize(said.c_str()).x, width * 0.5f);
+        ui::pop_font();
+        ImGui::SetCursorScreenPos(ImVec2(head.x + width - px(button) - px(16) - said_width, head.y + px(12)));
+        ui::text(said.c_str(), Font::Regular, ui::size::kDetail, p.secondary, said_width + 1.0f);
     }
+    ImGui::SetCursorScreenPos(ImVec2(head.x, std::max(head_bottom, head.y + px(40)) + px(14)));
+
+    // A narrow page: the players as a strip above the chat, the list over it when pressed
+    if (narrow_page) {
+        const std::string label = TrFormat("Players ({})", {std::to_string(community_people_.size())});
+        if (ui::button(label.c_str(), Kind::Secondary, 150.0f)) {
+            ImGui::OpenPopup("##community-players-popup");
+        }
+        ImGui::SameLine(0.0f, px(10));
+        const ImVec2 at = ImGui::GetCursorScreenPos();
+        for (size_t i = 0; i < community_people_.size() && i < 5; i++) {
+            launcher::flag_draw(community_people_[i].flag, at.x + static_cast<float>(i) * px(22), at.y + px(11), px(12));
+        }
+        ImGui::NewLine();
+        ui::gap(10);
+        ImGui::SetNextWindowSize(ImVec2(std::min(width, px(320)), 0.0f));
+        if (ImGui::BeginPopup("##community-players-popup")) {
+            community_players(std::min(width, px(320)) - px(16));
+            ImGui::EndPopup();
+        }
+    }
+
+    // The chat (centre) and the players (right): the rest of the page's height
+    const float gap = px(16);
+    const float players_width = narrow_page ? 0.0f : px(280);
+    const float chat_width = width - players_width - (narrow_page ? 0.0f : gap);
+    const ImVec2 body = ImGui::GetCursorScreenPos();
+    const float body_height = std::max(px(200), origin_y + height - body.y);
+    const float line_height = px(44);
+    // (each panel a surface like the launcher's cards, with room inside)
+    auto panel_style = [&] {
+        ImGui::PushStyleColor(ImGuiCol_ChildBg, p.surface);
+        ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, px(14));
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(px(18), px(16)));
+    };
+    auto panel_style_end = [] {
+        ImGui::PopStyleVar(2);
+        ImGui::PopStyleColor();
+    };
+    panel_style();
+    ImGui::BeginChild("##community-chat", ImVec2(chat_width, body_height - line_height - px(10)), ImGuiChildFlags_AlwaysUseWindowPadding | ImGuiChildFlags_NavFlattened);
+    // (following the newest only while at the bottom: as the list was at the end of the last frame)
+    const bool at_bottom = ImGui::GetScrollY() >= ImGui::GetScrollMaxY() - px(24);
     const bool moderator = community_you_.role == "moderator" || community_you_.role == "admin";
-    // Who is there
-    ui::gap(24);
-    // (no "updates every 10 seconds" here: the lobby's events come as they happen)
-    ui::text(TrFormat("HERE NOW: {}", {std::to_string(community_people_.size())}).c_str(), Font::Semibold, ui::size::kDetail, p.secondary);
-    ui::gap(10);
-    {
-        Card people(width);
-        if (community_people_.empty()) {
-            empty_row(width, Tr("Nobody else is here right now."), false);
-        }
-        for (size_t i = 0; i < community_people_.size(); i++) {
-            const launcher::CommunityPerson& one = community_people_[i];
-            if (i) {
-                inset_separator(width);
-            }
-            FlagOver(one.flag, ImGui::GetCursorScreenPos() + ImVec2(ui::px(18), ui::px(14)), ui::size::kBody);
-            const std::string name = FlagLabel(one.flag, ui::size::kBody) + one.nickname +
-                                     (one.role == "admin" ? std::string("  · ") + Tr("Administrator") : one.role == "moderator" ? std::string("  · ") + Tr("Moderator") : std::string());
-            const char* doing = one.state == "playing" ? "Playing" : one.state == "watching" ? "Watching" : "In the lobby";
-            ImGui::PushID(static_cast<int>(i));
-            const bool canModerate = moderator && one.nickname != community_you_.nickname;
-            row(width, name.c_str(), Tr(doing), canModerate ? 250.0f : 0.0f, 32.0f, [&] {
-                if (!canModerate) {
-                    return;
-                }
-                if (ui::button("Mute 10 min", Kind::Secondary, 110.0f)) {
-                    community_.Send("{\"type\":\"mute\",\"nickname\":\"" + one.nickname + "\",\"minutes\":10}");
-                }
-                ImGui::SameLine();
-                if (ui::button("Kick", Kind::Secondary, 110.0f)) {
-                    community_.Send("{\"type\":\"kick\",\"nickname\":\"" + one.nickname + "\"}");
-                }
-            });
-            ImGui::PopID();
-        }
-        people.end();
-    }
-    // The general chat: the history, newest at the bottom, and the line being typed
-    ui::gap(24);
-    ui::text(Tr("GENERAL CHAT"), Font::Semibold, ui::size::kDetail, p.secondary);
-    ui::gap(10);
-    // (`width` is in pixels already; the widgets' own widths are in points, as ui::px takes them)
-    ImGui::BeginChild("##community-chat", ImVec2(width, px(320)), ImGuiChildFlags_Borders);
-    const float wrap = width - px(40);
+    const float wrap = chat_width - px(52);
+    bool in_chat = false;  // (the ring on one of the chat's items: Right then goes to the players)
     for (size_t i = 0; i < community_messages_.size(); i++) {
         const launcher::CommunityMessage& m = community_messages_[i];
         ImGui::PushID(static_cast<int>(m.mid));
         FlagOver(m.flag, ImGui::GetCursorScreenPos(), ui::size::kDetail);
-        const std::string head = FlagLabel(m.flag, ui::size::kDetail) + m.nickname + "   " + ClockOf(m.at);
-        ui::text(head.c_str(), Font::Semibold, ui::size::kDetail, m.role == "admin" || m.role == "moderator" ? p.accent : p.secondary);
+        const std::string head_line = FlagLabel(m.flag, ui::size::kDetail) + m.nickname + "   " + ClockOf(m.at);
+        ui::text(head_line.c_str(), Font::Semibold, ui::size::kDetail, m.role == "admin" || m.role == "moderator" ? p.accent : p.secondary);
         if (moderator) {
             // (a quiet link after the time, not a button that draws the eye from the conversation)
             ImGui::SameLine(0.0f, px(12));
@@ -5395,6 +5568,7 @@ void App::community_page(float width) {
             if (ImGui::SmallButton(Tr("Delete"))) {
                 community_.Send("{\"type\":\"delete\",\"mid\":" + std::to_string(m.mid) + "}");
             }
+            in_chat = in_chat || ImGui::IsItemFocused();
             ui::pop_font();
             ImGui::PopStyleColor(4);
         }
@@ -5406,23 +5580,41 @@ void App::community_page(float width) {
     if (community_messages_.empty()) {
         ui::text(Tr("No messages in the last 24 hours. Say hello."), Font::Regular, ui::size::kBody, p.tertiary);
     }
-    if (community_scroll_) {
+    if (community_scroll_ && (at_bottom || community_scroll_always_)) {
         ImGui::SetScrollHereY(1.0f);
-        community_scroll_ = false;
     }
+    community_scroll_ = false;
+    community_scroll_always_ = false;
     ImGui::EndChild();
+    panel_style_end();
     ui::gap(10);
     const bool muted = SDL_GetTicks() < community_muted_until_;
     const bool open = state == launcher::CommunitySocket::State::Open;
-    ui::text_box("##community-line", community_line_, sizeof(community_line_), Tr(muted ? "You are muted" : "Write a message (500 characters at most)"), width / ui::scale() - 130.0f);
+    ui::text_box("##community-line", community_line_, sizeof(community_line_), Tr(muted ? "You are muted" : "Write a message (500 characters at most)"), chat_width / ui::scale() - 120.0f);
     const bool typing = ImGui::IsItemActive();
-    ImGui::SameLine();
+    in_chat = in_chat || (ImGui::IsItemFocused() && !typing);
+    ImGui::SameLine(0.0f, px(10));
     const bool send = ui::button("Send", Kind::Primary, 110.0f, open && !muted && community_line_[0]) ||
                       (community_line_active_ && ImGui::IsKeyPressed(ImGuiKey_Enter) && open && !muted && community_line_[0]);
     community_line_active_ = typing;
     if (send) {
         community_.Send(launcher::community_say(community_line_));
         community_line_[0] = 0;
+    }
+    // (Right from the chat: to the first of the players; ImGui's own search does not cross from a scrolled list)
+    if (!narrow_page && in_chat && ui::focus_shown() &&
+        (ImGui::IsKeyPressed(ImGuiKey_RightArrow) || ImGui::IsKeyPressed(ImGuiKey_GamepadDpadRight) || ImGui::IsKeyPressed(ImGuiKey_GamepadLStickRight))) {
+        community_focus_players_ = true;
+    }
+    if (!narrow_page) {
+        ImGui::SetCursorScreenPos(ImVec2(body.x + chat_width + gap, body.y));
+        panel_style();
+        ImGui::BeginChild("##community-players", ImVec2(players_width, body_height), ImGuiChildFlags_AlwaysUseWindowPadding | ImGuiChildFlags_NavFlattened);
+        ui::text(TrFormat("PLAYERS · {}", {std::to_string(community_people_.size())}).c_str(), Font::Semibold, ui::size::kSmall, p.tertiary);
+        ui::gap(12);
+        community_players(players_width - px(36));
+        ImGui::EndChild();
+        panel_style_end();
     }
 }
 #endif

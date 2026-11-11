@@ -68,6 +68,7 @@ SignInState signin_poll(const std::string& base, const SignInRequest& request);
 // ---- The lobby's events, as the service sends them (JSON): only what the launcher shows
 struct CommunityPerson {
     std::string nickname, flag, role, state;  // (state: "lobby", "playing", "watching")
+    std::string game;                         // (playing: the game's id, when said; community-three-panel-layout)
 };
 struct CommunityMessage {
     int64_t mid = 0, at = 0;  // (at: milliseconds since 1970, UTC)
@@ -87,6 +88,7 @@ struct CommunityEvent {
 CommunityEvent parse_community_event(const std::string& json);
 // A chat line as the service takes it ({"type":"say","text":...}), and the player's state
 std::string community_say(const std::string& text);
-std::string community_state(const std::string& state);
+// (game: the id of the game being played, sent with "playing" only; the service keeps [a-z0-9_]{1,24})
+std::string community_state(const std::string& state, const std::string& game = "");
 
 }  // namespace launcher

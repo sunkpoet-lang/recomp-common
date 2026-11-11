@@ -5,6 +5,11 @@ a minor version. A port's copy only changes when it runs `tools/sync-common.sh`.
 
 ## Unreleased
 
+- **The Community page in three panels** (ForkAde's community-three-panel-layout): the sidebar's games on the left
+  (each with how many lobby members play it), the general chat in the centre filling the height (following new
+  messages only while at its bottom), the players on the right (you first, then those playing with their game's
+  name, then the rest; a moderator presses a row for Mute and Kick). A narrow page shows a "Players (N)" strip
+  instead. The running game's id goes with "playing" in the lobby's presence.
 - **Flags in the Community page** (`launcher/src/flags.h`): the country flag beside each name (this player, who is
   there, the chat) from a 24x18 picture of every ISO country, flag-icons 7.6.0 (MIT, `THIRD_PARTY_NOTICES.md`),
   compiled in as a 256-colour atlas (`flags_atlas.inc`, 66 KB); a code with no picture shows none. Moderators' Delete
