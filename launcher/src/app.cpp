@@ -2883,7 +2883,7 @@ bool App::read_replay(const std::filesystem::path& path, ReplayRow& row) {
     }
     const unsigned format = start[8] | start[9] << 8;
     const uint32_t length = start[12] | start[13] << 8 | start[14] << 16 | static_cast<uint32_t>(start[15]) << 24;
-    if (format > 1) {
+    if (format > 2) { // (format 2: replay-compatibility's, any backend named in the header; 1: 0.1.2's)
         row.problem = "Recorded with a newer ForkAde: update to play it.";
         return false;
     }

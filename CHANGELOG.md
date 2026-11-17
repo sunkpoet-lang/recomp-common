@@ -5,6 +5,9 @@ a minor version. A port's copy only changes when it runs `tools/sync-common.sh`.
 
 ## Unreleased
 
+- **The Replays page reads format 2** (ForkAde's fork, replay-compatibility): `.fareplay` files of format 2, the one
+  written from now on (a backend named in the header, a gameplay identity, up to four players and an input width), are
+  listed as format 1's are; a newer format still says to update.
 - **The community connects on any PC** (ForkAde's fork): its libcurl requests take the certificates from Windows' own
   store (`CURLSSLOPT_NATIVE_CA`). The libcurl shipped beside the launcher has no certificate bundle of its own, and
   looked for MSYS2's, which only the build machine has.
