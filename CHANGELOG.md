@@ -5,6 +5,12 @@ a minor version. A port's copy only changes when it runs `tools/sync-common.sh`.
 
 ## Unreleased
 
+- **The replay viewer** (ForkAde's fork, replay-viewer): `replay_viewer.h` watches a replay the same way in every port
+  that plays them: pause, fast-forward x2 to x8, rewind seen as it goes (x1 to x8), slow motion (x0.75, x0.5, x0.25),
+  a frame either way, 5-second jumps, the start and the end, a timeline to go anywhere, round markers, an A-B loop, the
+  aids a game can draw, and a HUD at the bottom (keyboard, gamepad and mouse; shown or hidden by hand). The port gives
+  it a `Board` (run a frame seen or not, keep and put back states, go back to its keyframes); every frame shown is the
+  replay's own. Tested by `tests/replay_viewer_test.cpp` against a board whose state is a chain of hashes.
 - **The Replays page reads format 2** (ForkAde's fork, replay-compatibility): `.fareplay` files of format 2, the one
   written from now on (a backend named in the header, a gameplay identity, up to four players and an input width), are
   listed as format 1's are; a newer format still says to update.

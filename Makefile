@@ -7,7 +7,7 @@ CXXFLAGS := -std=c++17 -O2 -Wall -Wextra -Wpedantic -Isrc
 B := build
 
 .PHONY: test example launcher launcher-shots audit clean
-test: $(B)/menu_test $(B)/menubar_test $(B)/i18n_test $(B)/c_test $(B)/settings_test $(B)/settings_c_test $(B)/folders_test $(B)/proxy_test $(B)/update_test $(B)/chat_test $(B)/text_test
+test: $(B)/menu_test $(B)/menubar_test $(B)/i18n_test $(B)/c_test $(B)/settings_test $(B)/settings_c_test $(B)/folders_test $(B)/proxy_test $(B)/update_test $(B)/chat_test $(B)/text_test $(B)/replay_viewer_test
 	@$(B)/menu_test
 	@$(B)/menubar_test
 	@$(B)/i18n_test
@@ -19,10 +19,16 @@ test: $(B)/menu_test $(B)/menubar_test $(B)/i18n_test $(B)/c_test $(B)/settings_
 	@$(B)/update_test
 	@$(B)/chat_test
 	@$(B)/text_test
+	@$(B)/replay_viewer_test
 
 $(B)/menu_test: tests/menu_test.cpp src/menu.cpp src/menu.h src/text.h src/i18n.h src/i18n_pt_br.h src/i18n_es.h
 	@mkdir -p $(B)
 	$(CXX) $(CXXFLAGS) -fsanitize=address,undefined tests/menu_test.cpp src/menu.cpp -o $@
+
+# (ForkAde's fork, replay-viewer) Watching a replay (replay_viewer.h)
+$(B)/replay_viewer_test: tests/replay_viewer_test.cpp src/replay_viewer.cpp src/replay_viewer.h src/text.h
+	@mkdir -p $(B)
+	$(CXX) $(CXXFLAGS) -fsanitize=address,undefined tests/replay_viewer_test.cpp src/replay_viewer.cpp -o $@
 
 # The menu bar and the right-click menu (menubar.h)
 $(B)/menubar_test: tests/menubar_test.cpp src/menubar.cpp src/menubar.h src/menu.cpp src/menu.h src/text.h
